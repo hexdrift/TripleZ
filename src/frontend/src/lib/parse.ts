@@ -50,6 +50,24 @@ export function parseExcel(buffer: ArrayBuffer): Record<string, string>[] {
     });
 }
 
+export function parseOccupantIds(value: string): string[] {
+  if (!value.trim()) return [];
+  const trimmed = value.trim();
+  if (trimmed.startsWith("[")) {
+    try { const parsed = JSON.parse(trimmed); if (Array.isArray(parsed)) return parsed.map(String); } catch {}
+  }
+  return trimmed.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+}
+
+export function toRoomPayload(row: Record<string, string>): Record<string, unknown> {
+  return {
+    building_name: row.building_name ?? "", room_number: row.room_number ?? "",
+    number_of_beds: Number(row.number_of_beds) || 0, room_rank: row.room_rank ?? "",
+    gender: row.gender ?? "",
+    occupant_ids: parseOccupantIds(row.occupant_ids ?? ""),
+  };
+}
+
 export function parseFile(file: File): Promise<Record<string, string>[]> {
   const ext = file.name.split(".").pop()?.toLowerCase();
   if (ext === "xlsx" || ext === "xls") {

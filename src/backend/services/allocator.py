@@ -68,6 +68,10 @@ class RoomAllocatorCore:
         self.occupant_ids_col = occupant_ids_col
         self.room_id_cols = room_id_cols
 
+    def get_known_personnel_ids(self) -> set:
+        """Return the set of all known person_id strings."""
+        return {p["person_id"] for p in self._store.get_all("personnel")}
+
     def is_empty(self) -> bool:
         """Check whether the rooms table is empty.
 
@@ -515,6 +519,8 @@ class RoomAllocatorCore:
         if not candidates:
             return None
 
+        all_personnel = {p["person_id"]: p for p in self._store.get_all("personnel")}
+
         scored: List[Tuple[int, int, str, int, dict]] = []
         for room in candidates:
             ids = json.loads(room["occupant_ids"])
@@ -526,9 +532,9 @@ class RoomAllocatorCore:
                 dept_priority = 0 if department == designated else 1
             else:
                 occupant_depts = {
-                    self._store.get_by_id("personnel", pid)["department"]
+                    all_personnel[pid]["department"]
                     for pid in ids
-                    if self._store.get_by_id("personnel", pid)
+                    if pid in all_personnel
                 }
                 dept_priority = 0 if (not occupant_depts or department in occupant_depts) else 1
             scored.append((dept_priority, avail, room["building_name"], room["room_number"], room))

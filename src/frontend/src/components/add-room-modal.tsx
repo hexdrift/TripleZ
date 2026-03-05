@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { createRoom, loadRooms } from "@/lib/api";
 import { downloadBase64Excel } from "@/lib/export";
-import { parseFile } from "@/lib/parse";
+import { parseFile, toRoomPayload } from "@/lib/parse";
 import { RANK_HE, GENDER_HE } from "@/lib/hebrew";
 import { IconAlertCircle, IconCheck, IconDoor, IconUpload, IconX } from "./icons";
 
@@ -24,24 +24,6 @@ const COLUMN_LABELS: Record<string, string> = {
 interface Props { open: boolean; onClose: () => void; }
 type View = "chooser" | "form" | "csv";
 type Status = "idle" | "loading" | "success" | "error";
-
-function parseOccupantIds(value: string): string[] {
-  if (!value.trim()) return [];
-  const trimmed = value.trim();
-  if (trimmed.startsWith("[")) {
-    try { const parsed = JSON.parse(trimmed); if (Array.isArray(parsed)) return parsed.map(String); } catch {}
-  }
-  return trimmed.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
-}
-
-function toRoomPayload(row: Record<string, string>): Record<string, unknown> {
-  return {
-    building_name: row.building_name ?? "", room_number: row.room_number ?? "",
-    number_of_beds: Number(row.number_of_beds) || 0, room_rank: row.room_rank ?? "",
-    gender: row.gender ?? "",
-    occupant_ids: parseOccupantIds(row.occupant_ids ?? ""),
-  };
-}
 
 export function AddRoomModal({ open, onClose }: Props) {
   const [view, setView] = useState<View>("chooser");

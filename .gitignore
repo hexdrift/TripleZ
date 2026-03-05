@@ -32,8 +32,6 @@ Thumbs.db
 .env
 .env.*
 
-# Data files (user-specific)
-data/
 
 # Playwright MCP
 .playwright-mcp/

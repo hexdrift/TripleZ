@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
 import { loadRooms } from "@/lib/api";
 import { downloadBase64Excel } from "@/lib/export";
-import { parseFile } from "@/lib/parse";
+import { parseFile, parseOccupantIds, toRoomPayload } from "@/lib/parse";
 import { IconAlertCircle, IconCheck, IconHelpCircle, IconUpload, IconX } from "./icons";
 
 const EXPECTED_COLUMNS = [
@@ -32,36 +32,6 @@ interface UploadRoomsModalProps {
 }
 
 type Status = "idle" | "loading" | "success" | "error";
-
-function parseOccupantIds(value: string): string[] {
-  if (!value.trim()) return [];
-
-  const trimmed = value.trim();
-
-  // Try JSON array
-  if (trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed.map(String);
-    } catch {
-      // fall through to comma-separated
-    }
-  }
-
-  // Comma-separated
-  return trimmed.split(",").map((s) => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
-}
-
-function toRoomPayload(row: Record<string, string>): Record<string, unknown> {
-  return {
-    building_name: row.building_name ?? "",
-    room_number: row.room_number ?? "",
-    number_of_beds: Number(row.number_of_beds) || 0,
-    room_rank: row.room_rank ?? "",
-    gender: row.gender ?? "",
-    occupant_ids: parseOccupantIds(row.occupant_ids ?? ""),
-  };
-}
 
 export function UploadRoomsModal({ open, onClose }: UploadRoomsModalProps) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);

@@ -32,6 +32,50 @@ def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
     df.to_excel(buf, index=False, engine="openpyxl")
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
+
+def _validate_occupant_ids(df: pd.DataFrame) -> list[dict]:
+    """Validate occupant_ids against known personnel, removing unknown ones in-place.
+
+    Returns list of unknown personnel dicts.
+    """
+    known_ids = core.get_known_personnel_ids()
+    unknown_personnel: list[dict] = []
+
+    if not known_ids or "occupant_ids" not in df.columns:
+        return unknown_personnel
+
+    for idx, row in df.iterrows():
+        ids = row["occupant_ids"]
+        if not ids:
+            continue
+        valid_ids = []
+        for pid in ids:
+            pid_str = str(pid).strip()
+            if pid_str in known_ids:
+                valid_ids.append(pid_str)
+            else:
+                unknown_personnel.append({
+                    "person_id": pid_str,
+                    "building_name": str(row.get("building_name", "")),
+                    "room_number": str(row.get("room_number", "")),
+                })
+        df.at[idx, "occupant_ids"] = valid_ids
+
+    return unknown_personnel
+
+
+def _build_warnings(unknown_personnel: list[dict]) -> dict:
+    """Build the warnings dict for unknown personnel, or empty dict."""
+    if not unknown_personnel:
+        return {}
+    return {
+        "warnings": {
+            "unknown_personnel": unknown_personnel,
+            "message": f"{len(unknown_personnel)} אנשים לא נמצאו ברשימת כוח האדם ולא שובצו",
+            "excel_base64": _build_unknown_personnel_excel(unknown_personnel),
+        }
+    }
+
 router = APIRouter(prefix="/admin")
 
 
@@ -47,40 +91,10 @@ def admin_load_rooms(req: RoomsLoadRequest) -> dict:
     """
     try:
         df = pd.DataFrame([model_to_dict(r) for r in req.rooms])
-
-        # Validate occupant_ids against known personnel
-        known_ids = {p["person_id"] for p in core._store.get_all("personnel")}
-        unknown_personnel: list[dict] = []
-
-        if known_ids and "occupant_ids" in df.columns:
-            for idx, row in df.iterrows():
-                ids = row.get("occupant_ids", [])
-                if not ids:
-                    continue
-                valid_ids = []
-                for pid in ids:
-                    pid_str = str(pid).strip()
-                    if pid_str in known_ids:
-                        valid_ids.append(pid_str)
-                    else:
-                        unknown_personnel.append({
-                            "person_id": pid_str,
-                            "building_name": str(row.get("building_name", "")),
-                            "room_number": str(row.get("room_number", "")),
-                        })
-                df.at[idx, "occupant_ids"] = valid_ids
-
+        unknown = _validate_occupant_ids(df)
         core.load_rooms(df)
         bump_version()
-
-        result: dict = {"ok": True}
-        if unknown_personnel:
-            result["warnings"] = {
-                "unknown_personnel": unknown_personnel,
-                "message": f"{len(unknown_personnel)} אנשים לא נמצאו ברשימת כוח האדם ולא שובצו",
-                "excel_base64": _build_unknown_personnel_excel(unknown_personnel),
-            }
-        return result
+        return {"ok": True, **_build_warnings(unknown)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -146,39 +160,10 @@ async def upload_rooms_file(file: UploadFile = File(...)) -> dict:
         else:
             df["occupant_ids"] = [[] for _ in range(len(df))]
 
-        # Validate occupant_ids against known personnel
-        known_ids = {p["person_id"] for p in core._store.get_all("personnel")}
-        unknown_personnel: list[dict] = []
-
-        if known_ids:  # only validate if personnel data exists
-            for idx, row in df.iterrows():
-                ids = row["occupant_ids"]
-                if not ids:
-                    continue
-                valid_ids = []
-                for pid in ids:
-                    pid_str = str(pid).strip()
-                    if pid_str in known_ids:
-                        valid_ids.append(pid_str)
-                    else:
-                        unknown_personnel.append({
-                            "person_id": pid_str,
-                            "building_name": str(row.get("building_name", "")),
-                            "room_number": str(row.get("room_number", "")),
-                        })
-                df.at[idx, "occupant_ids"] = valid_ids
-
+        unknown = _validate_occupant_ids(df)
         core.load_rooms(df)
         bump_version()
-
-        result: dict = {"ok": True, "count": len(df)}
-        if unknown_personnel:
-            result["warnings"] = {
-                "unknown_personnel": unknown_personnel,
-                "message": f"{len(unknown_personnel)} אנשים לא נמצאו ברשימת כוח האדם ולא שובצו",
-                "excel_base64": _build_unknown_personnel_excel(unknown_personnel),
-            }
-        return result
+        return {"ok": True, "count": len(df), **_build_warnings(unknown)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

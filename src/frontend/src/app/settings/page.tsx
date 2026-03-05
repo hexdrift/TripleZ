@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell, useAppData } from "@/components/app-shell";
 import { toast } from "sonner";
 import { getSettings, updateSettings, uploadRoomsFile, uploadPersonnelFile, AppSettings } from "@/lib/api";
-import { downloadBase64Excel } from "@/lib/export";
+import { downloadBase64Excel, downloadBlob } from "@/lib/export";
 import { IconPlus, IconTrash, IconCheck, IconUpload, IconDownload } from "@/components/icons";
 
 export default function SettingsPage() {
@@ -89,9 +89,17 @@ function SettingsContent() {
                   file.text().then((text) => {
                     try {
                       const imported = JSON.parse(text);
-                      updateSettings(imported).then(setSettings);
-                      setSaved(true);
-                      setTimeout(() => setSaved(false), 2000);
+                      updateSettings(imported)
+                        .then((updated) => {
+                          setSettings(updated);
+                          setSaved(true);
+                          toast.success("הגדרות יובאו בהצלחה");
+                          setTimeout(() => setSaved(false), 2000);
+                        })
+                        .catch((err) => {
+                          setError(err.message);
+                          toast.error("שגיאה בייבוא הגדרות");
+                        });
                     } catch {
                       setError("קובץ JSON לא תקין");
                     }
@@ -104,12 +112,7 @@ function SettingsContent() {
               type="button"
               onClick={() => {
                 const blob = new Blob([JSON.stringify(settings, null, 2)], { type: "application/json" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "triplez_settings.json";
-                a.click();
-                URL.revokeObjectURL(url);
+                downloadBlob(blob, "triplez_settings.json");
               }}
               className="btn-ghost inline-flex items-center gap-1.5 text-[12px]"
             >
