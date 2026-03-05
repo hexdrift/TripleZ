@@ -348,11 +348,6 @@ a {
   background: var(--accent-muted);
 }
 
-.badge-success {
-  color: var(--success);
-  background: var(--success-dim);
-}
-
 .badge-warning {
   color: var(--warning);
   background: var(--warning-dim);

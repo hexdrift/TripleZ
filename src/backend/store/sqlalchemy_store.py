@@ -11,10 +11,9 @@ Examples:
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine, text
+from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.backend.store.base import RemoteStore

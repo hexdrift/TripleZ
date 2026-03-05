@@ -25,20 +25,3 @@ export function downloadBase64Excel(base64: string, filename: string) {
   const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   downloadBlob(blob, `${filename}.xlsx`);
 }
-
-/** Export data as CSV that opens correctly in Excel with Hebrew support (BOM + UTF-8). */
-export function exportToCSV(filename: string, headers: string[], rows: string[][]) {
-  const BOM = "\uFEFF";
-  const csvContent = [
-    headers.join(","),
-    ...rows.map((row) =>
-      row.map((cell) => {
-        const escaped = String(cell).replace(/"/g, '""');
-        return `"${escaped}"`;
-      }).join(",")
-    ),
-  ].join("\n");
-
-  const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
-  downloadBlob(blob, `${filename}.csv`);
-}

@@ -72,14 +72,6 @@ class RoomAllocatorCore:
         """Return the set of all known person_id strings."""
         return {p["person_id"] for p in self._store.get_all("personnel")}
 
-    def is_empty(self) -> bool:
-        """Check whether the rooms table is empty.
-
-        Returns:
-            True if no rooms exist in the store.
-        """
-        return len(self._store.get_all("rooms")) == 0
-
     def load_rooms(self, rooms_df: pd.DataFrame) -> None:
         """Replace all rooms in the store with rows from a DataFrame.
 

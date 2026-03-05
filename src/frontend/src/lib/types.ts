@@ -12,12 +12,6 @@ export interface Room {
   occupant_count: number;
 }
 
-export interface PersonLink {
-  person_id: string;
-  building_name: string;
-  room_number: number;
-}
-
 export interface Personnel {
   person_id: string;
   full_name: string;

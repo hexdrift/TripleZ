@@ -1,4 +1,4 @@
-import { Room, PersonLink, Personnel, AssignResponse, BuildingSummary, DepartmentSummary, GenderSummary, RankSummary } from "./types";
+import { Room, Personnel, AssignResponse, BuildingSummary, DepartmentSummary, GenderSummary, RankSummary } from "./types";
 import { getApiBaseUrl } from "./api-base";
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
@@ -19,10 +19,6 @@ export async function getRooms(): Promise<Room[]> {
   return fetchJSON<Room[]>("/rooms");
 }
 
-export async function getLinks(): Promise<PersonLink[]> {
-  return fetchJSON<PersonLink[]>("/links");
-}
-
 export async function assignPerson(
   personId: string,
   extra?: { rank?: string; department?: string; gender?: string; person_name?: string }
@@ -38,10 +34,6 @@ export async function unassignPerson(personId: string): Promise<{ ok: boolean; d
     method: "POST",
     body: JSON.stringify({ person_id: personId }),
   });
-}
-
-export async function getPersonRoom(personId: string): Promise<AssignResponse> {
-  return fetchJSON<AssignResponse>(`/person/${encodeURIComponent(personId)}`);
 }
 
 export async function getPersonnel(): Promise<Personnel[]> {
@@ -135,21 +127,6 @@ export async function setRoomDepartment(
     method: "POST",
     body: JSON.stringify({ building_name: buildingName, room_number: roomNumber, department }),
   });
-}
-
-export async function uploadRoomsFile(file: File): Promise<{
-  ok: boolean;
-  count: number;
-  warnings?: RoomLoadWarnings;
-}> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch(`${getApiBaseUrl()}/admin/upload_rooms`, { method: "POST", body: form });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API ${res.status}: ${body}`);
-  }
-  return res.json();
 }
 
 export async function uploadPersonnelFile(file: File): Promise<{ ok: boolean; count: number }> {
