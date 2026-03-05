@@ -38,6 +38,7 @@ Thumbs.db
 
 # PyInstaller
 *.spec
+!app.spec
 
 # Legacy UI dir
 ui/
