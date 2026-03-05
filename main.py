@@ -18,6 +18,13 @@ from typing import Optional
 
 import uvicorn
 
+# PyInstaller with console=False sets sys.stdout/stderr to None,
+# which crashes uvicorn's log formatter (.isatty() on None).
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 
 def resource_path(relative_path: str) -> str:
     """Get absolute path to a resource, works for dev and PyInstaller."""
