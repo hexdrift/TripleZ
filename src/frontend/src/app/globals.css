@@ -1,0 +1,427 @@
+@import "tailwindcss";
+
+/*
+ * TripleZ Theme — Dark-first, Blue Accent
+ * Heebo (Hebrew) + JetBrains Mono (IDs/numbers)
+ */
+
+/* ════════════════════════════════════════════
+   DARK MODE (default)
+   ════════════════════════════════════════════ */
+:root {
+  color-scheme: dark;
+
+  --bg: #0c0e11;
+  --surface-1: #141619;
+  --surface-2: #1a1d21;
+  --surface-3: #22262b;
+
+  --border: #2a2e34;
+  --border-subtle: #1e2227;
+
+  --text-1: #e8eaed;
+  --text-2: #9ba1ab;
+  --text-3: #636a75;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-muted: rgba(59, 130, 246, 0.1);
+
+  --danger: #ef4444;
+  --danger-dim: rgba(248, 113, 113, 0.12);
+  --danger-border: rgba(248, 113, 113, 0.25);
+
+  --success: #22c55e;
+  --success-dim: rgba(74, 222, 128, 0.12);
+  --success-border: rgba(74, 222, 128, 0.25);
+
+  --warning: #eab308;
+  --warning-dim: rgba(250, 204, 21, 0.12);
+  --warning-border: rgba(250, 204, 21, 0.25);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.2);
+  --shadow-hover: 0 4px 10px rgba(0, 0, 0, 0.4), 0 10px 24px rgba(0, 0, 0, 0.2);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Legacy aliases for backward compatibility */
+  --text-strong: var(--text-1);
+  --text: var(--text-2);
+  --text-soft: var(--text-2);
+  --text-muted: var(--text-3);
+  --text-dim: var(--text-3);
+  --bg-muted: var(--surface-2);
+  --bg-sidebar: var(--surface-1);
+  --primary: var(--accent);
+  --primary-fg: #ffffff;
+  --accent-strong: var(--accent);
+  --accent-dim: var(--accent-muted);
+  --accent-border: rgba(59, 130, 246, 0.25);
+  --border-hover: var(--border);
+  --focus-ring: var(--accent);
+  --hover-overlay: rgba(255, 255, 255, 0.03);
+  --pressed-overlay: rgba(255, 255, 255, 0.06);
+}
+
+/* ════════════════════════════════════════════
+   LIGHT MODE
+   ════════════════════════════════════════════ */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f3f4f6;
+  --surface-1: #ffffff;
+  --surface-2: #f0f1f3;
+  --surface-3: #e5e7eb;
+
+  --border: #d1d5db;
+  --border-subtle: #e5e7eb;
+
+  --text-1: #111827;
+  --text-2: #4b5563;
+  --text-3: #9ca3af;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: rgba(37, 99, 235, 0.08);
+
+  --danger: #dc2626;
+  --danger-dim: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.18);
+
+  --success: #16a34a;
+  --success-dim: rgba(22, 163, 74, 0.08);
+  --success-border: rgba(22, 163, 74, 0.18);
+
+  --warning: #ca8a04;
+  --warning-dim: rgba(202, 138, 4, 0.08);
+  --warning-border: rgba(202, 138, 4, 0.18);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 4px 10px rgba(0, 0, 0, 0.1), 0 10px 24px rgba(0, 0, 0, 0.06);
+
+  /* Legacy aliases */
+  --text-strong: var(--text-1);
+  --text: var(--text-2);
+  --text-soft: var(--text-2);
+  --text-muted: var(--text-3);
+  --text-dim: var(--text-3);
+  --bg-muted: var(--surface-2);
+  --bg-sidebar: var(--surface-1);
+  --primary: var(--accent);
+  --primary-fg: #ffffff;
+  --accent-strong: var(--accent);
+  --accent-dim: var(--accent-muted);
+  --accent-border: rgba(37, 99, 235, 0.18);
+  --border-hover: var(--border);
+  --focus-ring: var(--accent);
+  --hover-overlay: rgba(0, 0, 0, 0.03);
+  --pressed-overlay: rgba(0, 0, 0, 0.06);
+}
+
+/* ════════════════════════════════════════════
+   BASE STYLES
+   ════════════════════════════════════════════ */
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html {
+  direction: rtl;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--text-1);
+  background: var(--bg);
+  font-family: "Heebo Variable", "Heebo", system-ui, -apple-system, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, .font-mono {
+  font-family: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ════════════════════════════════════════════
+   SCROLLBAR
+   ════════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: var(--border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
+/* ════════════════════════════════════════════
+   CARDS & SURFACES
+   ════════════════════════════════════════════ */
+.surface-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.surface-soft {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.interactive-card {
+  transition: all 200ms ease-out;
+}
+
+.interactive-card:hover {
+  background-color: var(--surface-2);
+}
+
+/* ════════════════════════════════════════════
+   BUTTONS
+   ════════════════════════════════════════════ */
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-ghost {
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  min-height: 38px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.btn-primary {
+  color: #fff;
+  background-color: var(--accent);
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.btn-secondary {
+  color: var(--text-2);
+  background-color: var(--surface-2);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover {
+  background-color: var(--surface-3);
+}
+
+.btn-danger {
+  color: #fff;
+  background-color: var(--danger);
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+.btn-ghost {
+  color: var(--text-2);
+  background: transparent;
+}
+
+.btn-ghost:hover {
+  background: var(--surface-2);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled,
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ════════════════════════════════════════════
+   FORM CONTROLS
+   ════════════════════════════════════════════ */
+.control-input,
+.control-select {
+  width: 100%;
+  color: var(--text-1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: inherit;
+  box-shadow: none;
+  transition: border-color 120ms ease;
+}
+
+.control-input::placeholder {
+  color: var(--text-3);
+}
+
+.control-input:focus,
+.control-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  outline: none;
+}
+
+/* ════════════════════════════════════════════
+   TYPOGRAPHY
+   ════════════════════════════════════════════ */
+.section-title {
+  color: var(--text-1);
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.section-subtitle {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.panel-subtitle {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ════════════════════════════════════════════
+   BADGES
+   ════════════════════════════════════════════ */
+.badge {
+  border-radius: 2px;
+  border: none;
+  color: var(--text-2);
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 8px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge-accent {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.badge-success {
+  color: var(--success);
+  background: var(--success-dim);
+}
+
+.badge-warning {
+  color: var(--warning);
+  background: var(--warning-dim);
+}
+
+.badge-danger {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+/* ════════════════════════════════════════════
+   TABLES
+   ════════════════════════════════════════════ */
+.table-shell {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.table-head-cell {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table-row {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color 100ms ease;
+}
+
+.table-row:hover {
+  background: var(--surface-2);
+}
+
+.table-row:last-child {
+  border-bottom: none;
+}
+
+/* ════════════════════════════════════════════
+   SKELETON LOADING
+   ════════════════════════════════════════════ */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, var(--surface-2) 8%, var(--surface-3) 18%, var(--surface-2) 33%);
+  background-size: 200% 100%;
+  animation: shine 1.3s linear infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position-x: -200%;
+  }
+}
+
+/* ════════════════════════════════════════════
+   ACCESSIBILITY
+   ════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

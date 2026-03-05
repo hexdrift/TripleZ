@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+*.db
+*.sqlite3
+venv/
+clean_venv/
+.venv/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Data files (user-specific)
+data/
+
+# Playwright MCP
+.playwright-mcp/
+
+# PyInstaller
+*.spec
+
+# Legacy UI dir
+ui/
