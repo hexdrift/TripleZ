@@ -7,7 +7,7 @@ import { createRoom, loadRooms } from "@/lib/api";
 import { downloadBase64Excel } from "@/lib/export";
 import { parseFile, toRoomPayload } from "@/lib/parse";
 import { RANK_HE, GENDER_HE } from "@/lib/hebrew";
-import { IconAlertCircle, IconCheck, IconDoor, IconUpload, IconX } from "./icons";
+import { IconAlertCircle, IconBed, IconBuilding, IconCheck, IconCrown, IconDoor, IconGender, IconHash, IconUpload, IconX } from "./icons";
 
 const RANKS = Object.keys(RANK_HE);
 const GENDERS = Object.keys(GENDER_HE);
@@ -49,27 +49,74 @@ export function AddRoomModal({ open, onClose }: Props) {
         <motion.div
           key="backdrop"
           className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)" }}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
         >
           <motion.div
             ref={dialogRef} role="dialog" aria-modal="true"
-            className="surface-card w-full max-w-[720px] max-h-[calc(100vh-40px)] overflow-hidden"
+            className="surface-card w-full max-w-[640px] max-h-[calc(100vh-40px)] overflow-hidden"
+            style={{ boxShadow: "0 25px 60px rgba(0,0,0,0.4)" }}
             initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ duration: 0.2 }}
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <ModalHeader
-              title="הוספת חדר"
-              subtitle={view === "chooser" ? "בחר אופן הוספה" : view === "csv" ? "העלאת קובץ CSV או Excel" : "מילוי טופס ידני"}
-              onClose={handleClose}
-              onBack={view !== "chooser" ? () => { setView("chooser"); setStatus("idle"); setMessage(""); } : undefined}
-            />
-            <div className="px-8 py-6 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
-              {view === "chooser" && <Chooser onCSV={() => setView("csv")} onForm={() => setView("form")} csvLabel="העלאת קובץ CSV או Excel" formLabel="הוספת חדר ידנית" />}
-              {view === "form" && <RoomForm status={status} message={message} setStatus={setStatus} setMessage={setMessage} onDone={handleClose} />}
-              {view === "csv" && <RoomCSV status={status} message={message} setStatus={setStatus} setMessage={setMessage} />}
+            {/* Header */}
+            <div className="px-7 pt-6 pb-5 flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                {view !== "chooser" && (
+                  <motion.button
+                    type="button" onClick={() => { setView("chooser"); setStatus("idle"); setMessage(""); }}
+                    className="h-9 w-9 rounded-xl flex items-center justify-center transition-colors"
+                    style={{ background: "var(--surface-2)", color: "var(--text-2)" }}
+                    whileHover={{ background: "var(--surface-3)" }}
+                    whileTap={{ scale: 0.95 }}
+                    aria-label="חזור"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
+                  </motion.button>
+                )}
+                <div>
+                  <h2 className="text-[20px] font-bold" style={{ color: "var(--text-1)" }}>
+                    {view === "chooser" ? "הוספת חדר" : view === "form" ? "חדר חדש" : "טעינה מקובץ"}
+                  </h2>
+                  <p className="text-[12px] mt-0.5" style={{ color: "var(--text-3)" }}>
+                    {view === "chooser" ? "בחר אופן הוספה" : view === "form" ? "מלא את פרטי החדר" : "העלאת קובץ CSV או Excel"}
+                  </p>
+                </div>
+              </div>
+              <button type="button" onClick={handleClose}
+                className="h-8 w-8 rounded-lg flex items-center justify-center transition-colors"
+                style={{ color: "var(--text-3)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface-2)"; e.currentTarget.style.color = "var(--text-1)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-3)"; }}
+                aria-label="סגור"
+              >
+                <IconX size={16} />
+              </button>
+            </div>
+
+            <div className="border-t" style={{ borderColor: "var(--border)" }} />
+
+            {/* Body */}
+            <div className="px-7 py-6 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
+              <AnimatePresence mode="wait">
+                {view === "chooser" && (
+                  <motion.div key="chooser" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.15 }}>
+                    <Chooser onCSV={() => setView("csv")} onForm={() => setView("form")} />
+                  </motion.div>
+                )}
+                {view === "form" && (
+                  <motion.div key="form" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
+                    <RoomForm status={status} message={message} setStatus={setStatus} setMessage={setMessage} onDone={handleClose} />
+                  </motion.div>
+                )}
+                {view === "csv" && (
+                  <motion.div key="csv" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
+                    <RoomCSV status={status} message={message} setStatus={setStatus} setMessage={setMessage} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </motion.div>
@@ -107,35 +154,69 @@ function RoomForm({ status, message, setStatus, setMessage, onDone }: {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit}>
       <AlertBox status={status} message={message} />
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="שם מבנה">
-          <input className="control-input" placeholder="לדוגמה: A" value={building} onChange={(e) => setBuilding(e.target.value)} />
-        </Field>
-        <Field label="מספר חדר">
-          <input className="control-input" type="number" placeholder="101" value={roomNum} onChange={(e) => setRoomNum(e.target.value)} />
-        </Field>
-        <Field label="מספר מיטות">
+
+      <div className="space-y-5">
+        {/* Building & Room Number row */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="שם מבנה" icon={<IconBuilding size={15} />}>
+            <input className="control-input" placeholder="לדוגמה: A" value={building} onChange={(e) => setBuilding(e.target.value)} />
+          </FormField>
+          <FormField label="מספר חדר" icon={<IconHash size={15} />}>
+            <input className="control-input" type="number" placeholder="101" value={roomNum} onChange={(e) => setRoomNum(e.target.value)} />
+          </FormField>
+        </div>
+
+        {/* Beds */}
+        <FormField label="מספר מיטות" icon={<IconBed size={15} />}>
           <input className="control-input" type="number" min={1} placeholder="4" value={beds} onChange={(e) => setBeds(e.target.value)} />
-        </Field>
-        <Field label="דרגת חדר">
-          <select className="control-select" value={rank} onChange={(e) => setRank(e.target.value)}>
-            {RANKS.map((r) => <option key={r} value={r}>{RANK_HE[r]}</option>)}
-          </select>
-        </Field>
-        <Field label="מגדר">
-          <select className="control-select" value={gender} onChange={(e) => setGender(e.target.value)}>
-            {GENDERS.map((g) => <option key={g} value={g}>{GENDER_HE[g]}</option>)}
-          </select>
-        </Field>
+        </FormField>
+
+        {/* Rank & Gender row */}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="דרגת חדר" icon={<IconCrown size={15} />}>
+            <select className="control-select" value={rank} onChange={(e) => setRank(e.target.value)}>
+              {RANKS.map((r) => <option key={r} value={r}>{RANK_HE[r]}</option>)}
+            </select>
+          </FormField>
+          <FormField label="מגדר" icon={<IconGender size={15} />}>
+            <select className="control-select" value={gender} onChange={(e) => setGender(e.target.value)}>
+              {GENDERS.map((g) => <option key={g} value={g}>{GENDER_HE[g]}</option>)}
+            </select>
+          </FormField>
+        </div>
       </div>
-      <div className="flex justify-center mt-2">
-        <button type="submit" disabled={status === "loading"} className="btn-primary inline-flex items-center gap-2"
-          style={{ opacity: status === "loading" ? 0.5 : 1 }}>
-          <IconDoor size={15} />
-          {status === "loading" ? "שומר..." : "הוסף חדר"}
-        </button>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-7 pt-5 border-t" style={{ borderColor: "var(--border)" }}>
+        <p className="text-[11px]" style={{ color: "var(--text-3)" }}>כל השדות נדרשים</p>
+        <motion.button
+          type="submit" disabled={status === "loading"}
+          className="px-5 py-2.5 rounded-xl text-white font-semibold text-[14px] inline-flex items-center gap-2"
+          style={{
+            background: status === "loading" ? "var(--text-3)" : "var(--accent)",
+            cursor: status === "loading" ? "not-allowed" : "pointer",
+          }}
+          whileHover={status !== "loading" ? { scale: 1.02 } : {}}
+          whileTap={status !== "loading" ? { scale: 0.98 } : {}}
+        >
+          {status === "loading" ? (
+            <>
+              <motion.div
+                className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+              />
+              שומר...
+            </>
+          ) : (
+            <>
+              <IconCheck size={16} />
+              הוסף חדר
+            </>
+          )}
+        </motion.button>
       </div>
     </form>
   );
@@ -236,12 +317,20 @@ function RoomCSV({ status, message, setStatus, setMessage }: {
               </tbody>
             </table>
           </div>
-          <button type="button" onClick={handleSubmit} disabled={status === "loading"}
-            className="btn-primary inline-flex items-center gap-2"
-            style={{ opacity: status === "loading" ? 0.5 : 1 }}>
-            <IconUpload size={15} />
-            {status === "loading" ? "טוען..." : `טען ${rows.length} חדרים`}
-          </button>
+          <div className="flex justify-end pt-4 border-t" style={{ borderColor: "var(--border)" }}>
+            <motion.button type="button" onClick={handleSubmit} disabled={status === "loading"}
+              className="px-5 py-2.5 rounded-xl text-white font-semibold text-[14px] inline-flex items-center gap-2"
+              style={{
+                background: status === "loading" ? "var(--text-3)" : "var(--accent)",
+                cursor: status === "loading" ? "not-allowed" : "pointer",
+              }}
+              whileHover={status !== "loading" ? { scale: 1.02 } : {}}
+              whileTap={status !== "loading" ? { scale: 0.98 } : {}}
+            >
+              <IconUpload size={15} />
+              {status === "loading" ? "טוען..." : `טען ${rows.length} חדרים`}
+            </motion.button>
+          </div>
         </>
       )}
     </>
@@ -250,54 +339,50 @@ function RoomCSV({ status, message, setStatus, setMessage }: {
 
 /* ─── Shared sub-components ─── */
 
-function ModalHeader({ title, subtitle, onClose, onBack }: { title: string; subtitle: string; onClose: () => void; onBack?: () => void }) {
-  return (
-    <header className="px-8 py-6 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
-      <div className="flex items-center gap-3">
-        {onBack && (
-          <button type="button" onClick={onBack} className="btn-ghost !min-h-[36px] !px-2" aria-label="חזור">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-          </button>
-        )}
-        <div>
-          <h2 className="text-[24px] font-bold" style={{ color: "var(--text-1)" }}>{title}</h2>
-          <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>{subtitle}</p>
-        </div>
-      </div>
-      <button type="button" onClick={onClose} className="btn-ghost !min-h-[36px] !px-2" aria-label="סגור חלון"><IconX size={18} /></button>
-    </header>
-  );
-}
-
-function Chooser({ onCSV, onForm, csvLabel, formLabel }: { onCSV: () => void; onForm: () => void; csvLabel: string; formLabel: string }) {
+function Chooser({ onCSV, onForm }: { onCSV: () => void; onForm: () => void }) {
   return (
     <div className="grid grid-cols-2 gap-4">
-      <ChooserCard icon={<IconUpload size={28} />} label={csvLabel} desc="העלאת קובץ CSV או Excel עם מספר רשומות" onClick={onCSV} />
-      <ChooserCard icon={<IconDoor size={28} />} label={formLabel} desc="מילוי טופס להוספה בודדת" onClick={onForm} />
+      <motion.button type="button" onClick={onForm}
+        className="rounded-xl p-6 text-right flex flex-col gap-4 border-2 cursor-pointer group"
+        style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+        whileHover={{ borderColor: "var(--accent)", scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <div className="h-11 w-11 rounded-xl flex items-center justify-center"
+          style={{ background: "var(--accent-muted)", color: "var(--accent)" }}>
+          <IconDoor size={22} />
+        </div>
+        <div>
+          <p className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>הוספה ידנית</p>
+          <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>מילוי טופס להוספת חדר בודד</p>
+        </div>
+      </motion.button>
+      <motion.button type="button" onClick={onCSV}
+        className="rounded-xl p-6 text-right flex flex-col gap-4 border-2 cursor-pointer group"
+        style={{ borderColor: "var(--border)", background: "var(--surface-2)" }}
+        whileHover={{ borderColor: "var(--accent)", scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <div className="h-11 w-11 rounded-xl flex items-center justify-center"
+          style={{ background: "var(--accent-muted)", color: "var(--accent)" }}>
+          <IconUpload size={22} />
+        </div>
+        <div>
+          <p className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>טעינה מקובץ</p>
+          <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>העלאת CSV או Excel עם מספר חדרים</p>
+        </div>
+      </motion.button>
     </div>
   );
 }
 
-function ChooserCard({ icon, label, desc, onClick }: { icon: React.ReactNode; label: string; desc: string; onClick: () => void }) {
-  return (
-    <motion.button type="button" onClick={onClick}
-      className="surface-soft rounded-xl p-6 text-right flex flex-col gap-3 border cursor-pointer"
-      style={{ borderColor: "var(--border)" }}
-      whileHover={{ borderColor: "var(--text-3)", scale: 1.01 }}
-      whileTap={{ scale: 0.98 }}>
-      <span style={{ color: "var(--text-2)" }}>{icon}</span>
-      <div>
-        <p className="text-[15px] font-semibold" style={{ color: "var(--text-1)" }}>{label}</p>
-        <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>{desc}</p>
-      </div>
-    </motion.button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function FormField({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-[12px] font-semibold mb-1.5" style={{ color: "var(--text-2)" }}>{label}</label>
+      <label className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "var(--text-2)" }}>
+        <span style={{ color: "var(--text-3)" }}>{icon}</span>
+        {label}
+      </label>
       {children}
     </div>
   );
@@ -305,16 +390,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function AlertBox({ status, message }: { status: Status; message: string }) {
   if (status === "error" && message) return (
-    <div className="rounded-lg px-3 py-2.5 text-[13px] flex items-start gap-2 mb-4"
+    <motion.div
+      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl px-4 py-3 text-[13px] flex items-start gap-2.5 mb-5"
       style={{ color: "var(--danger)", background: "var(--danger-dim)", border: "1px solid var(--danger-border)" }}>
-      <IconAlertCircle size={15} /><span>{message}</span>
-    </div>
+      <IconAlertCircle size={16} className="shrink-0 mt-0.5" /><span>{message}</span>
+    </motion.div>
   );
   if (status === "success" && message) return (
-    <div className="rounded-lg px-3 py-2.5 text-[13px] flex items-start gap-2 mb-4"
+    <motion.div
+      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl px-4 py-3 text-[13px] flex items-start gap-2.5 mb-5"
       style={{ color: "var(--success)", background: "var(--success-dim)", border: "1px solid var(--success-border)" }}>
-      <IconCheck size={15} /><span>{message}</span>
-    </div>
+      <IconCheck size={16} className="shrink-0 mt-0.5" /><span>{message}</span>
+    </motion.div>
   );
   return null;
 }
@@ -325,10 +414,12 @@ function DropZone({ isDragging, fileName, fileRef, accept, onFile, setIsDragging
 }) {
   return (
     <motion.div
-      className={`bg-gray-50 rounded-lg p-8 flex flex-col items-center justify-center space-y-3 border-2 border-dashed cursor-pointer mb-5 ${
-        isDragging ? "border-gray-500" : fileName ? "border-gray-400" : "border-gray-300"
-      }`}
-      whileHover={{ boxShadow: "0 0 0 2px var(--accent-muted)", backgroundColor: "var(--surface-2)" }}
+      className="rounded-xl p-8 flex flex-col items-center justify-center space-y-3 border-2 border-dashed cursor-pointer mb-5"
+      style={{
+        borderColor: isDragging ? "var(--accent)" : fileName ? "var(--text-3)" : "var(--border)",
+        background: isDragging ? "var(--accent-muted)" : "var(--surface-2)",
+      }}
+      whileHover={{ borderColor: "var(--accent)", background: "var(--accent-muted)" }}
       onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
       onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
       onDragOver={(e) => e.preventDefault()}
@@ -338,16 +429,22 @@ function DropZone({ isDragging, fileName, fileRef, accept, onFile, setIsDragging
       <input ref={fileRef} type="file" accept={accept} onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} className="hidden" />
       {fileName ? (
         <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center">
-          <span className="mb-2" style={{ color: "var(--text-1)" }}><IconUpload size={40} /></span>
-          <p className="text-sm font-medium" style={{ color: "var(--text-2)" }}>{fileName}</p>
-          <p className="text-xs" style={{ color: "var(--text-3)" }}>לחץ להחלפת קובץ</p>
+          <div className="h-12 w-12 rounded-xl flex items-center justify-center mb-2"
+            style={{ background: "var(--accent-muted)", color: "var(--accent)" }}>
+            <IconUpload size={24} />
+          </div>
+          <p className="text-[14px] font-semibold" style={{ color: "var(--text-1)" }}>{fileName}</p>
+          <p className="text-[12px] mt-0.5" style={{ color: "var(--text-3)" }}>לחץ להחלפת קובץ</p>
         </motion.div>
       ) : (
         <>
-          <span style={{ color: "var(--text-3)" }}><IconUpload size={36} /></span>
+          <div className="h-12 w-12 rounded-xl flex items-center justify-center"
+            style={{ background: "var(--surface-3)", color: "var(--text-3)" }}>
+            <IconUpload size={24} />
+          </div>
           <div className="text-center">
-            <p className="text-sm font-medium" style={{ color: "var(--text-2)" }}>גרור ושחרר קובץ CSV או Excel כאן</p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-3)" }}>או לחץ לבחירת קובץ</p>
+            <p className="text-[14px] font-semibold" style={{ color: "var(--text-2)" }}>גרור ושחרר קובץ כאן</p>
+            <p className="text-[12px] mt-0.5" style={{ color: "var(--text-3)" }}>CSV, XLSX, XLS</p>
           </div>
         </>
       )}

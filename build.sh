@@ -10,10 +10,10 @@ echo "[1/4] Installing Python dependencies..."
 pip install -r src/backend/requirements.txt
 
 echo "[2/4] Installing frontend dependencies..."
-cd src/frontend && pnpm install && cd ../..
+cd src/frontend && npm ci && cd ../..
 
 echo "[3/4] Building Next.js frontend..."
-cd src/frontend && pnpm build && cd ../..
+cd src/frontend && npm run build && cd ../..
 
 echo "[4/4] Building standalone executable..."
 pyinstaller app.spec

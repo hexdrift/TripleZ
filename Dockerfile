@@ -3,11 +3,11 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-COPY src/frontend/package.json src/frontend/pnpm-lock.yaml* ./
-RUN corepack enable && pnpm install --frozen-lockfile
+COPY src/frontend/package.json src/frontend/package-lock.json* ./
+RUN npm ci
 
 COPY src/frontend/ .
-RUN pnpm build
+RUN npm run build
 
 # Stage 2: Python backend + static frontend
 FROM python:3.11-slim

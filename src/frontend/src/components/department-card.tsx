@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { DepartmentSummary } from "@/lib/types";
 import { buildingHe, deptHe } from "@/lib/hebrew";
@@ -10,40 +11,42 @@ export function DepartmentCard({ department }: { department: DepartmentSummary }
   const tone = pct > 80 ? "badge-danger" : pct > 50 ? "badge-warning" : "badge-accent";
 
   return (
-    <motion.div
-      className="surface-card interactive-card p-5"
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      transition={{ duration: 0.1 }}
-    >
-      <div className="flex items-start justify-between gap-4 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl flex items-center justify-center" style={{ background: "var(--accent-muted)", color: "var(--accent)", border: "1px solid var(--accent-border)" }}>
-            <IconUsers size={19} />
+    <Link href={`/buildings?department=${encodeURIComponent(department.name)}`} className="block">
+      <motion.div
+        className="surface-card interactive-card p-5"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+        transition={{ duration: 0.1 }}
+      >
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl flex items-center justify-center" style={{ background: "var(--accent-muted)", color: "var(--accent)", border: "1px solid var(--accent-border)" }}>
+              <IconUsers size={19} />
+            </div>
+            <div>
+              <h3 className="text-[18px] font-bold leading-tight" style={{ color: "var(--text-1)" }}>
+                {deptHe(department.name)}
+              </h3>
+              <p className="text-[12px]" style={{ color: "var(--text-3)" }}>
+                {department.totalRooms} חדרים · {department.buildings.map((b) => `מבנה ${buildingHe(b)}`).join(", ")}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-[18px] font-bold leading-tight" style={{ color: "var(--text-1)" }}>
-              {deptHe(department.name)}
-            </h3>
-            <p className="text-[12px]" style={{ color: "var(--text-3)" }}>
-              {department.totalRooms} חדרים · {department.buildings.map((b) => `מבנה ${buildingHe(b)}`).join(", ")}
-            </p>
-          </div>
+
+          <span className={`badge ${tone}`}>{pct}% תפוסה</span>
         </div>
 
-        <span className={`badge ${tone}`}>{pct}% תפוסה</span>
-      </div>
+        <div className="w-full rounded-full h-2 mb-4" style={{ background: "var(--surface-3)" }}>
+          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: occupancyColor(pct) }} />
+        </div>
 
-      <div className="w-full rounded-full h-2 mb-4" style={{ background: "var(--surface-3)" }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: occupancyColor(pct) }} />
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <MiniStat icon={<IconBed size={13} />} label="מיטות" value={department.totalBeds} />
-        <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={department.occupiedBeds} tone="warning" />
-        <MiniStat icon={<IconBed size={13} />} label="פנויים" value={department.availableBeds} tone="accent" />
-      </div>
-    </motion.div>
+        <div className="grid grid-cols-3 gap-2">
+          <MiniStat icon={<IconBed size={13} />} label="מיטות" value={department.totalBeds} />
+          <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={department.occupiedBeds} tone="warning" />
+          <MiniStat icon={<IconBed size={13} />} label="פנויים" value={department.availableBeds} tone="accent" />
+        </div>
+      </motion.div>
+    </Link>
   );
 }
 

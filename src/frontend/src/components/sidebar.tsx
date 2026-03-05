@@ -74,7 +74,7 @@ export function Sidebar({ buildings, viewMode, rooms }: SidebarProps) {
     if (viewMode === "departments") {
       return departments.map((d) => ({
         key: d.name,
-        href: `/`,
+        href: `/buildings?department=${encodeURIComponent(d.name)}`,
         icon: <IconUsers size={15} />,
         label: deptHe(d.name),
         pct: Math.round(d.occupancyRate * 100),
@@ -83,7 +83,7 @@ export function Sidebar({ buildings, viewMode, rooms }: SidebarProps) {
     if (viewMode === "gender") {
       return genders.map((g) => ({
         key: g.name,
-        href: `/`,
+        href: `/buildings?gender=${encodeURIComponent(g.name)}`,
         icon: <IconGender size={15} />,
         label: genderHe(g.name),
         pct: Math.round(g.occupancyRate * 100),
@@ -91,7 +91,7 @@ export function Sidebar({ buildings, viewMode, rooms }: SidebarProps) {
     }
     return ranks.map((r) => ({
       key: r.name,
-      href: `/`,
+      href: `/buildings?rank=${encodeURIComponent(r.name)}`,
       icon: <IconCrown size={15} />,
       label: rankHe(r.name),
       pct: Math.round(r.occupancyRate * 100),

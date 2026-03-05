@@ -148,7 +148,7 @@ function DashboardContent() {
         {viewMode === "buildings" ? (
           buildings.length === 0 ? (
             auth.role === "admin" ? (
-              <EmptyState onUploadRooms={() => setAddRoomOpen(true)} />
+              <EmptyState />
             ) : (
               <div className="surface-card p-12 text-center">
                 <p className="text-[16px] font-semibold" style={{ color: "var(--text-1)" }}>אין חדרים בזירה שלך</p>
@@ -210,6 +210,7 @@ function DashboardContent() {
                     occupiedBeds={g.occupiedBeds}
                     availableBeds={g.availableBeds}
                     occupancyRate={g.occupancyRate}
+                    href={`/buildings?gender=${encodeURIComponent(g.name)}`}
                   />
                 </motion.div>
               ))}
@@ -233,6 +234,7 @@ function DashboardContent() {
                     occupiedBeds={r.occupiedBeds}
                     availableBeds={r.availableBeds}
                     occupancyRate={r.occupancyRate}
+                    href={`/buildings?rank=${encodeURIComponent(r.name)}`}
                   />
                 </motion.div>
               ))}
@@ -296,18 +298,12 @@ function DashboardSkeleton() {
   );
 }
 
-function EmptyState({ onUploadRooms }: { onUploadRooms: () => void }) {
+function EmptyState() {
   return (
     <div className="surface-card p-12 text-center">
       <IconDoor size={34} className="mx-auto mb-3" />
       <p className="text-[16px] font-semibold mb-1" style={{ color: "var(--text-1)" }}>לא נטענו נתונים</p>
-      <p className="text-[13px] mb-6" style={{ color: "var(--text-3)" }}>כדי להתחיל, יש לטעון קובץ חדרים</p>
-      <div className="flex items-center justify-center gap-3">
-        <button onClick={onUploadRooms} className="btn-secondary inline-flex items-center gap-2">
-          <IconDoor size={15} />
-          טעינת חדרים
-        </button>
-      </div>
+      <p className="text-[13px]" style={{ color: "var(--text-3)" }}>כדי להתחיל, יש לטעון קובץ חדרים</p>
     </div>
   );
 }
