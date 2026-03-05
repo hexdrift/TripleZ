@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { AppShell, useAppData } from "@/components/app-shell";
 import { toast } from "sonner";
-import { getSettings, updateSettings, uploadRoomsFile, uploadPersonnelFile, AppSettings } from "@/lib/api";
-import { downloadBase64Excel, downloadBlob } from "@/lib/export";
-import { IconPlus, IconTrash, IconCheck, IconUpload, IconDownload } from "@/components/icons";
+import { getSettings, updateSettings, loadPersonnelFromUrl, uploadPersonnelFile, AppSettings } from "@/lib/api";
+import { downloadBlob } from "@/lib/export";
+import { IconPlus, IconTrash, IconCheck, IconUpload, IconDownload, IconRefresh } from "@/components/icons";
 
 export default function SettingsPage() {
   return (
@@ -21,6 +21,7 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingPersonnel, setLoadingPersonnel] = useState(false);
 
   useEffect(() => {
     if (auth.role !== "admin") return;
@@ -70,15 +71,31 @@ function SettingsContent() {
     }
   }
 
+  async function handleLoadPersonnel() {
+    setLoadingPersonnel(true);
+    try {
+      const res = await loadPersonnelFromUrl();
+      toast.success(`נטענו ${res.count} אנשי כוח אדם`);
+    } catch (e: any) {
+      toast.error(e.message || "שגיאה בטעינת כוח אדם");
+    } finally {
+      setLoadingPersonnel(false);
+    }
+  }
+
   return (
     <>
+      {/* Header with actions */}
       <section className="surface-card p-8 mb-7">
         <div className="flex items-center justify-between">
-          <h2 className="section-title">הגדרות מערכת</h2>
+          <div>
+            <h2 className="section-title">הגדרות מערכת</h2>
+            <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>ניהול הגדרות כלליות, דרגות, מחלקות ומבנים</p>
+          </div>
           <div className="flex items-center gap-2">
             <label className="btn-ghost inline-flex items-center gap-1.5 text-[12px] cursor-pointer">
               <IconUpload size={14} />
-              ייבוא הגדרות
+              ייבוא
               <input
                 type="file"
                 accept=".json"
@@ -117,7 +134,7 @@ function SettingsContent() {
               className="btn-ghost inline-flex items-center gap-1.5 text-[12px]"
             >
               <IconDownload size={14} />
-              ייצוא הגדרות
+              ייצוא
             </button>
             <button
               onClick={handleSave}
@@ -131,6 +148,56 @@ function SettingsContent() {
         </div>
       </section>
 
+      {/* Personnel */}
+      <section className="surface-card p-6 mb-7">
+        <h3 className="text-[16px] font-bold mb-1" style={{ color: "var(--text-1)" }}>כוח אדם</h3>
+        <p className="text-[12px] mb-4" style={{ color: "var(--text-3)" }}>טעינת רשימת כוח אדם מכתובת URL או מקובץ Excel</p>
+
+        <div className="flex items-center gap-3 mb-4">
+          <input
+            type="url"
+            value={settings.personnel_url}
+            onChange={(e) => setSettings({ ...settings, personnel_url: e.target.value })}
+            placeholder="https://example.com/personnel.xlsx"
+            className="flex-1 px-3 py-2 rounded-lg border text-[14px]"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
+            dir="ltr"
+          />
+          <button
+            type="button"
+            onClick={handleLoadPersonnel}
+            disabled={loadingPersonnel || !settings.personnel_url.trim()}
+            className="btn-secondary inline-flex items-center gap-2 shrink-0"
+            style={{ opacity: loadingPersonnel || !settings.personnel_url.trim() ? 0.5 : 1 }}
+          >
+            <IconRefresh size={14} />
+            {loadingPersonnel ? "טוען..." : "טען מ-URL"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
+          <span className="text-[12px]" style={{ color: "var(--text-3)" }}>או העלאה ידנית:</span>
+          <label className="btn-ghost inline-flex items-center gap-1.5 text-[12px] cursor-pointer">
+            <IconUpload size={14} />
+            העלאת קובץ Excel
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                uploadPersonnelFile(file)
+                  .then((res) => toast.success(`נטענו ${res.count} אנשי כוח אדם`))
+                  .catch((err) => toast.error(err.message || "שגיאה בטעינת כוח אדם"));
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      </section>
+
+      {/* Lists grid */}
       <div className="grid grid-cols-2 gap-6 mb-7">
         <ListEditor
           title="דרגות (מהגבוהה לנמוכה)"
@@ -162,90 +229,51 @@ function SettingsContent() {
         />
       </div>
 
+      {/* Passwords */}
       <section className="surface-card p-6 mb-7">
-        <h3 className="text-[16px] font-bold mb-4" style={{ color: "var(--text-1)" }}>סיסמאות</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-[12px] font-semibold mb-1" style={{ color: "var(--text-2)" }}>סיסמת מנהל</label>
-            <input
-              type="text"
-              value={settings.admin_password}
-              onChange={(e) => setSettings({ ...settings, admin_password: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border text-[14px]"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
-              dir="ltr"
-            />
-          </div>
+        <h3 className="text-[16px] font-bold mb-1" style={{ color: "var(--text-1)" }}>סיסמאות</h3>
+        <p className="text-[12px] mb-4" style={{ color: "var(--text-3)" }}>סיסמת כניסה למנהל ולמחלקות</p>
+
+        <div className="mb-5">
+          <label className="block text-[12px] font-semibold mb-1.5" style={{ color: "var(--text-2)" }}>סיסמת מנהל</label>
+          <input
+            type="text"
+            value={settings.admin_password}
+            onChange={(e) => setSettings({ ...settings, admin_password: e.target.value })}
+            className="w-full max-w-sm px-3 py-2 rounded-lg border text-[14px]"
+            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
+            dir="ltr"
+          />
         </div>
 
-        <h4 className="text-[14px] font-semibold mt-5 mb-3" style={{ color: "var(--text-2)" }}>סיסמאות מחלקות</h4>
+        <h4 className="text-[14px] font-semibold mb-3" style={{ color: "var(--text-2)" }}>סיסמאות מחלקות</h4>
         <div className="grid grid-cols-2 gap-3">
-          {settings.departments.map((dept) => (
-            <div key={dept} className="flex items-center gap-2">
-              <span className="text-[13px] font-medium w-20 text-left" style={{ color: "var(--text-2)" }} dir="ltr">{dept}</span>
-              <input
-                type="text"
-                value={settings.dept_passwords[dept] || ""}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    dept_passwords: { ...settings.dept_passwords, [dept]: e.target.value },
-                  })
-                }
-                className="flex-1 px-3 py-1.5 rounded-lg border text-[13px]"
-                style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
-                dir="ltr"
-              />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="surface-card p-6 mb-7">
-        <h3 className="text-[16px] font-bold mb-4" style={{ color: "var(--text-1)" }}>טעינת נתונים מאקסל</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <FileUploadButton label="טעינת חדרים" onUpload={async (file) => {
-            const res = await uploadRoomsFile(file);
-            if (res.warnings?.unknown_personnel?.length) {
-              toast.error(res.warnings.message, {
-                duration: 10000,
-                action: {
-                  label: "הורד רשימה",
-                  onClick: () => downloadBase64Excel(res.warnings!.excel_base64, "אנשים_לא_מזוהים"),
-                },
-              });
-            }
-            return res;
-          }} />
-          <FileUploadButton label="טעינת כוח אדם" onUpload={uploadPersonnelFile} />
+          {settings.departments.map((dept) => {
+            const hebrewLabel = settings.hebrew.departments[dept];
+            return (
+              <div key={dept} className="flex items-center gap-2">
+                <span className="text-[13px] font-medium w-24 shrink-0 text-right" style={{ color: "var(--text-2)" }}>
+                  {hebrewLabel || dept}
+                </span>
+                <input
+                  type="text"
+                  value={settings.dept_passwords[dept] || ""}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      dept_passwords: { ...settings.dept_passwords, [dept]: e.target.value },
+                    })
+                  }
+                  className="flex-1 px-3 py-1.5 rounded-lg border text-[13px]"
+                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
+                  dir="ltr"
+                />
+              </div>
+            );
+          })}
         </div>
       </section>
     </>
-  );
-}
-
-function FileUploadButton({ label, onUpload }: { label: string; onUpload: (file: File) => Promise<{ ok: boolean; count: number }> }) {
-  const [status, setStatus] = useState<string | null>(null);
-
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setStatus("טוען...");
-    onUpload(file)
-      .then((res) => { setStatus(`נטענו ${res.count} שורות`); toast.success(`נטענו ${res.count} שורות`); })
-      .catch((err) => { setStatus(`שגיאה: ${err.message}`); toast.error(`שגיאה: ${err.message}`); });
-    e.target.value = "";
-  }
-
-  return (
-    <div>
-      <label className="btn-secondary inline-flex items-center gap-2 cursor-pointer">
-        <IconUpload size={15} />
-        {label}
-        <input type="file" accept=".xlsx,.xls,.csv" onChange={handleChange} className="hidden" />
-      </label>
-      {status && <p className="text-[12px] mt-2" style={{ color: "var(--text-3)" }}>{status}</p>}
-    </div>
   );
 }
 
@@ -290,7 +318,7 @@ function ListEditor({
       <div className="space-y-2 mb-3">
         {items.map((item, i) => (
           <div key={item} className="flex items-center gap-2">
-            <span className="text-[13px] font-mono w-24 shrink-0" style={{ color: "var(--text-2)" }} dir="ltr">{item}</span>
+            <span className="text-[13px] font-mono w-24 shrink-0 text-right" style={{ color: "var(--text-2)" }}>{item}</span>
             <input
               type="text"
               value={hebrewMap[item] || ""}

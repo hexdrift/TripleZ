@@ -163,11 +163,16 @@ export async function uploadPersonnelFile(file: File): Promise<{ ok: boolean; co
   return res.json();
 }
 
+export async function loadPersonnelFromUrl(): Promise<{ ok: boolean; count: number }> {
+  return fetchJSON("/admin/load_personnel_from_url", { method: "POST" });
+}
+
 export interface AppSettings {
   ranks_high_to_low: string[];
   genders: string[];
   departments: string[];
   buildings: string[];
+  personnel_url: string;
   admin_password: string;
   dept_passwords: Record<string, string>;
   hebrew: {

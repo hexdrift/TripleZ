@@ -185,10 +185,32 @@ function RoomCSV({ status, message, setStatus, setMessage }: {
       <DropZone isDragging={isDragging} fileName={fileName} fileRef={fileRef} accept=".csv,.xlsx,.xls"
         onFile={processFile} setIsDragging={setIsDragging} />
       {rows.length === 0 && status !== "error" && (
-        <div className="surface-soft p-4 rounded-lg text-[12px] mb-4" style={{ color: "var(--text-2)" }}>
-          <p className="font-semibold mb-2">עמודות נדרשות בקובץ:</p>
-          <div className="flex flex-wrap gap-1.5">
-            {EXPECTED_COLUMNS.map((col) => <span key={col} className="badge" style={{ padding: "4px 8px" }}>{COLUMN_LABELS[col]} ({col})</span>)}
+        <div className="mb-4">
+          <p className="text-[12px] font-semibold mb-2" style={{ color: "var(--text-2)" }}>תבנית קובץ לדוגמה:</p>
+          <div className="table-shell overflow-x-auto">
+            <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>
+              <thead><tr>
+                {EXPECTED_COLUMNS.map((col) => <th key={col} className="table-head-cell text-right px-3 py-2">{COLUMN_LABELS[col]}</th>)}
+              </tr></thead>
+              <tbody>
+                <tr className="table-row">
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>א</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>101</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>4</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>בכיר</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>זכר</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>101,102</td>
+                </tr>
+                <tr className="table-row">
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>ב</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>202</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>3</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>זוטר</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>נקבה</td>
+                  <td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -234,14 +234,14 @@ export function UploadRoomsModal({ open, onClose }: UploadRoomsModalProps) {
                     <span>תבנית קובץ לדוגמה</span>
                   </button>
                   {showHelp && (
-                    <div className="table-shell overflow-x-auto mt-2" style={{ direction: "ltr" }}>
+                    <div className="table-shell overflow-x-auto mt-2">
                       <table className="w-full text-[11px]" style={{ borderCollapse: "collapse" }}>
                         <thead><tr>
-                          {EXPECTED_COLUMNS.map((col) => <th key={col} className="table-head-cell text-left px-3 py-2">{col}</th>)}
+                          {EXPECTED_COLUMNS.map((col) => <th key={col} className="table-head-cell text-right px-3 py-2">{COLUMN_LABELS[col]}</th>)}
                         </tr></thead>
                         <tbody>
-                          <tr className="table-row"><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>A</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>1</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>4</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>manager</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>male</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>101,102</td></tr>
-                          <tr className="table-row"><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>B</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>2</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>3</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>junior</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>female</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}></td></tr>
+                          <tr className="table-row"><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>א</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>1</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>4</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>בכיר</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>זכר</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>101,102</td></tr>
+                          <tr className="table-row"><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>ב</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>2</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>3</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>זוטר</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}>נקבה</td><td className="px-3 py-1.5" style={{ color: "var(--text-3)" }}></td></tr>
                         </tbody>
                       </table>
                     </div>

@@ -21,6 +21,7 @@ DEFAULTS: Dict[str, Any] = {
     "genders": ["M", "F"],
     "departments": ["Exec", "Sales", "R&D", "IT", "QA", "Ops"],
     "buildings": ["A", "B", "C", "D"],
+    "personnel_url": "",
     "admin_password": "admin123",
     "dept_passwords": {
         "Exec": "Exec123",

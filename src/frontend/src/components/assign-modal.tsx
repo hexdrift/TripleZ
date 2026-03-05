@@ -106,13 +106,13 @@ export function AssignModal({ open, onClose, onSuccess }: AssignModalProps) {
 
   function onTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, currentTab: Tab) {
     const currentIndex = TAB_ORDER.indexOf(currentTab);
-    if (event.key === "ArrowRight") {
+    if (event.key === "ArrowLeft") {
       event.preventDefault();
       const next = TAB_ORDER[(currentIndex + 1) % TAB_ORDER.length];
       setTab(next);
       return;
     }
-    if (event.key === "ArrowLeft") {
+    if (event.key === "ArrowRight") {
       event.preventDefault();
       const prev = TAB_ORDER[(currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length];
       setTab(prev);

@@ -7,6 +7,7 @@ import io
 import json
 
 import pandas as pd
+import requests
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from config import model_to_dict
@@ -18,6 +19,7 @@ from src.backend.schemas import (
     SetRoomDepartmentRequest,
     SimpleOK,
 )
+from src.backend.settings import load_settings
 
 
 def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
@@ -182,6 +184,34 @@ def set_room_department(req: SetRoomDepartmentRequest) -> SimpleOK:
     if ok:
         bump_version()
     return SimpleOK(ok=ok, detail=err)
+
+
+@router.post("/load_personnel_from_url")
+def load_personnel_from_url() -> dict:
+    """Load personnel from the configured URL in settings.
+
+    Returns:
+        Dict with ok status and count of loaded personnel.
+    """
+    settings = load_settings()
+    url = settings.get("personnel_url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="כתובת URL לכוח אדם לא הוגדרה בהגדרות")
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        content = resp.content
+        if url.endswith(".csv"):
+            df = pd.read_csv(io.BytesIO(content))
+        else:
+            df = pd.read_excel(io.BytesIO(content))
+        core.load_personnel(df)
+        bump_version()
+        return {"ok": True, "count": len(df)}
+    except requests.RequestException as e:
+        raise HTTPException(status_code=400, detail=f"שגיאה בטעינה מ-URL: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/upload_personnel")
