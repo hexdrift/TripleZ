@@ -6,16 +6,21 @@ import asyncio
 import json
 from typing import List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from starlette.responses import StreamingResponse
 
+from src.backend.access import filter_rooms_for_session
+from src.backend.auth_session import AuthSession, require_authenticated
 from src.backend.dependencies import core, get_data_version
 
 router = APIRouter()
 
 
 @router.get("/stream/rooms")
-async def stream_rooms(request: Request) -> StreamingResponse:
+async def stream_rooms(
+    request: Request,
+    session: AuthSession = Depends(require_authenticated),
+) -> StreamingResponse:
     """Stream room data as Server-Sent Events, pushing updates on change.
 
     Args:
@@ -37,8 +42,12 @@ async def stream_rooms(request: Request) -> StreamingResponse:
             current = get_data_version()
             if current != last_version:
                 last_version = current
-                rooms = core.rooms_with_state().to_dict(orient="records")
-                yield f"data: {json.dumps(rooms, ensure_ascii=False)}\n\n"
+                rooms = filter_rooms_for_session(
+                    session,
+                    core.rooms_with_state().to_dict(orient="records"),
+                )
+                payload = {"version": current, "rooms": rooms}
+                yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
             await asyncio.sleep(0.5)
 
     return StreamingResponse(
@@ -49,22 +58,37 @@ async def stream_rooms(request: Request) -> StreamingResponse:
 
 
 @router.get("/rooms")
-def get_rooms() -> List[dict]:
+def get_rooms(session: AuthSession = Depends(require_authenticated)) -> List[dict]:
     """Return all rooms with dynamically computed available beds.
 
     Returns:
         A list of dicts, each representing a room with its current state.
     """
-    return core.rooms_with_state().to_dict(orient="records")
+    return filter_rooms_for_session(
+        session,
+        core.rooms_with_state().to_dict(orient="records"),
+    )
 
 
 @router.get("/links")
-def get_links() -> List[dict]:
+def get_links(session: AuthSession = Depends(require_authenticated)) -> List[dict]:
     """Return person-to-room identity mappings.
 
     Returns:
         A list of dicts mapping person IDs to their assigned rooms.
     """
-    return core.links_df().to_dict(orient="records")
-
+    visible_rooms = filter_rooms_for_session(
+        session,
+        core.rooms_with_state().to_dict(orient="records"),
+    )
+    visible_ids = {
+        (str(room["building_name"]), int(room["room_number"]))
+        for room in visible_rooms
+    }
+    links = [
+        row
+        for row in core.links_df().to_dict(orient="records")
+        if (str(row["building_name"]), int(row["room_number"])) in visible_ids
+    ]
+    return links
 

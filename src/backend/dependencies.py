@@ -6,7 +6,7 @@ import os
 
 from src.backend.services.allocator import RoomAllocatorCore
 from src.backend.services.rank_policy import RankPolicy
-from src.backend.settings import get_ranks_high_to_low
+from src.backend.settings import get_default_database_url, get_ranks_high_to_low
 from src.backend.store.base import RemoteStore
 
 _data_version = 0
@@ -16,21 +16,17 @@ def _create_store() -> RemoteStore:
     """Return the RemoteStore implementation based on STORE_BACKEND env var.
 
     Supported values:
-        memory      — in-memory dict store (default, data lost on restart)
-        sqlalchemy  — SQLAlchemy-backed store (requires DATABASE_URL env var)
+        memory      — in-memory dict store (data lost on restart)
+        sqlalchemy  — SQLAlchemy-backed store (default, persisted to SQLite
+                      unless DATABASE_URL is provided)
 
     Returns:
         A RemoteStore instance.
     """
-    backend = os.environ.get("STORE_BACKEND", "memory").lower()
+    backend = os.environ.get("STORE_BACKEND", "sqlalchemy").lower()
 
     if backend == "sqlalchemy":
-        database_url = os.environ.get("DATABASE_URL")
-        if not database_url:
-            raise RuntimeError(
-                "STORE_BACKEND=sqlalchemy requires DATABASE_URL environment variable. "
-                "Examples: sqlite:///data.db, postgresql://user:pass@host/db"
-            )
+        database_url = os.environ.get("DATABASE_URL") or get_default_database_url()
         from src.backend.store.sqlalchemy_store import SQLAlchemyStore
         return SQLAlchemyStore(database_url)
 
@@ -46,6 +42,13 @@ def _create_store() -> RemoteStore:
 store = _create_store()
 rank_policy = RankPolicy(get_ranks_high_to_low())
 core = RoomAllocatorCore(store, rank_policy=rank_policy)
+
+
+def reload_runtime_settings() -> None:
+    """Refresh runtime policy objects after settings changes."""
+    ranks = get_ranks_high_to_low()
+    rank_policy.ranks_high_to_low = list(ranks)
+    core.rank_policy = RankPolicy(ranks)
 
 
 def bump_version() -> None:

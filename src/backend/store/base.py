@@ -3,11 +3,13 @@ Abstract remote document store interface.
 
 ── HOW TO SET UP ──────────────────────────────────────────────────────
 
-1. Create two independent tables in your CRUD HTTP service
-   (see TABLE_SCHEMAS below for columns and types):
+1. Create independent tables in your CRUD HTTP service
+   with these primary keys:
 
    rooms      — PK: room_id  (String, e.g. "A__10")
    personnel  — PK: person_id (String)
+   app_meta   — PK: key (String)
+   audit_log  — PK: event_id (String)
 
    No joins, no foreign keys between tables.
 
@@ -64,33 +66,6 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional
 
 
-TABLE_SCHEMAS: dict[str, dict] = {
-    "rooms": {
-        "pk": "room_id",
-        "columns": {
-            "room_id": "String",
-            "building_name": "String",
-            "room_number": "Integer",
-            "number_of_beds": "Integer",
-            "room_rank": "String",
-            "gender": "String",
-            "designated_department": "String (optional, empty string if not set)",
-            "occupant_ids": "String (JSON array of person_id strings, e.g. '[\"9001\", \"9002\"]')",
-        },
-    },
-    "personnel": {
-        "pk": "person_id",
-        "columns": {
-            "person_id": "String",
-            "full_name": "String",
-            "department": "String",
-            "gender": "String",
-            "rank": "String",
-        },
-    },
-}
-
-
 class RemoteStore(ABC):
     """
     Abstract interface for your remote CRUD service.
@@ -108,7 +83,7 @@ class RemoteStore(ABC):
         HTTP equivalent: GET /{table}
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
 
         Returns:
             All rows as list of dicts. Empty list if table has no rows.
@@ -122,7 +97,7 @@ class RemoteStore(ABC):
         HTTP equivalent: GET /{table}/{pk_value}
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
             pk_value: Primary key value (room_id string or person_id string).
 
         Returns:
@@ -137,7 +112,7 @@ class RemoteStore(ABC):
         HTTP equivalent: GET /{table}?field1=value1&field2=value2
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
             filters: Dict of {column: value} equality filters.
                      Example: {"room_rank": "VP", "gender": "M"}
 
@@ -153,7 +128,7 @@ class RemoteStore(ABC):
         HTTP equivalent: POST /{table} with body = row dict
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
             row: Dict of column values (must include primary key).
         """
 
@@ -165,7 +140,7 @@ class RemoteStore(ABC):
         HTTP equivalent: PATCH /{table}/{pk_value} with body = updates dict
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
             pk_value: Primary key value of row to update.
             updates: Dict of {column: new_value} to set. Only listed fields change.
         """
@@ -178,7 +153,7 @@ class RemoteStore(ABC):
         HTTP equivalent: DELETE /{table}/{pk_value}
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
             pk_value: Primary key value of row to delete.
         """
 
@@ -190,5 +165,19 @@ class RemoteStore(ABC):
         HTTP equivalent: DELETE /{table} (or POST /{table}/clear)
 
         Args:
-            table: "rooms" or "personnel"
+            table: "rooms", "personnel", "app_meta", or "audit_log"
         """
+
+    def bulk_update(self, table: str, updates: list[tuple[Any, dict]]) -> None:
+        """
+        Update multiple rows as a single logical operation.
+
+        Implementations may override this to provide atomic persistence.
+        The default behavior falls back to sequential updates.
+
+        Args:
+            table: "rooms" or "personnel"
+            updates: List of ``(primary_key, update_dict)`` tuples.
+        """
+        for pk_value, row_updates in updates:
+            self.update(table, pk_value, row_updates)

@@ -31,6 +31,16 @@ Thumbs.db
 .env
 .env.*
 
+# TripleZ runtime local files
+triplez_settings.json
+.triplez_session_secret
+tmp_no_rooms_backup.json
+tmp/
+src/frontend/tmp/
+test-results/
+src/frontend/test-results/
+playwright-report/
+
 
 # Playwright MCP
 .playwright-mcp/

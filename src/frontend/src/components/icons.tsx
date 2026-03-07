@@ -122,6 +122,14 @@ export function IconChevronDown({ size, className }: IconProps = defaults) {
   return svg(size ?? 20, className ?? "", <path d="M6 9l6 6 6-6" />);
 }
 
+export function IconMenu({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <line x1="4" y1="7" x2="20" y2="7" />
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <line x1="4" y1="17" x2="20" y2="17" />
+  </>);
+}
+
 export function IconX({ size, className }: IconProps = defaults) {
   return svg(size ?? 20, className ?? "", <>
     <line x1="18" y1="6" x2="6" y2="18" />
@@ -159,20 +167,6 @@ export function IconSun({ size, className }: IconProps = defaults) {
     <path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" />
     <path d="M2 12h2" /><path d="M20 12h2" />
     <path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" />
-  </>);
-}
-
-export function IconTrendingUp({ size, className }: IconProps = defaults) {
-  return svg(size ?? 20, className ?? "", <>
-    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-    <polyline points="16 7 22 7 22 13" />
-  </>);
-}
-
-export function IconTrendingDown({ size, className }: IconProps = defaults) {
-  return svg(size ?? 20, className ?? "", <>
-    <polyline points="22 17 13.5 8.5 8.5 13.5 2 7" />
-    <polyline points="16 17 22 17 22 11" />
   </>);
 }
 
@@ -235,24 +229,6 @@ export function IconUpload({ size, className }: IconProps = defaults) {
   </>);
 }
 
-export function IconSparkles({ size, className }: IconProps = defaults) {
-  return svg(size ?? 20, className ?? "", <>
-    <path d="m12 3 1.9 3.8L18 8.7l-3 2.9.7 4.1-3.7-2-3.7 2 .7-4.1-3-2.9 4.1-.9z" />
-    <path d="M20 3v2" />
-    <path d="M21 4h-2" />
-    <path d="M4 17v2" />
-    <path d="M5 18H3" />
-  </>);
-}
-
-export function IconUserCheck({ size, className }: IconProps = defaults) {
-  return svg(size ?? 20, className ?? "", <>
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <polyline points="16 11 18 13 22 9" />
-  </>);
-}
-
 export function IconBedOff({ size, className }: IconProps = defaults) {
   return (
     <svg width={size ?? 20} height={size ?? 20} viewBox="0 0 50 50" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className={className ?? ""} aria-hidden="true">
@@ -273,14 +249,6 @@ export function IconDownload({ size, className }: IconProps = defaults) {
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
-  </>);
-}
-
-export function IconHelpCircle({ size, className }: IconProps = defaults) {
-  return svg(size ?? 20, className ?? "", <>
-    <circle cx="12" cy="12" r="10" />
-    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-    <path d="M12 17h.01" />
   </>);
 }
 
@@ -337,6 +305,22 @@ export function IconLock({ size, className }: IconProps = defaults) {
   </>);
 }
 
+export function IconEye({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+    <circle cx="12" cy="12" r="3" />
+  </>);
+}
+
+export function IconEyeOff({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <path d="M3 3l18 18" />
+    <path d="M10.6 10.6A3 3 0 0 0 13.4 13.4" />
+    <path d="M9.9 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17.3 17.3 0 0 1-4 4.9" />
+    <path d="M6.7 6.7C4.5 8 3 10.2 2 12c0 0 3.5 7 10 7 1.7 0 3.2-.4 4.5-1" />
+  </>);
+}
+
 export function IconGender({ size, className }: IconProps = defaults) {
   return svg(size ?? 20, className ?? "", <>
     <circle cx="10" cy="8" r="5" />
@@ -345,6 +329,22 @@ export function IconGender({ size, className }: IconProps = defaults) {
     <path d="M15.5 7.5l3.5 -4.5" />
     <path d="M10 13v8" />
     <path d="M7 18h6" />
+  </>);
+}
+
+export function IconMale({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <circle cx="10" cy="14" r="5" />
+    <path d="M19 5l-5.4 5.4" />
+    <path d="M15 5h4v4" />
+  </>);
+}
+
+export function IconFemale({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <circle cx="12" cy="9" r="5" />
+    <path d="M12 14v7" />
+    <path d="M9 18h6" />
   </>);
 }
 

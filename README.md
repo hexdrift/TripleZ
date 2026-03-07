@@ -50,6 +50,13 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm dev
 ```
 
 Open http://localhost:3000. Default admin password: `admin123` (configurable in settings).
+Development ports are fixed to:
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000/api`
+
+If you run on different ports, set:
+- Frontend env `NEXT_PUBLIC_API_URL` (for example: `http://localhost:8100`)
+- Backend env `TRIPLEZ_CORS_ORIGINS` as comma-separated origins (for example: `http://localhost:3000,http://localhost:3001`)
 
 ### Docker
 
@@ -90,13 +97,13 @@ Personnel Excel: `person_id`, `full_name`, `department`, `gender`, `rank`.
 
 ## API
 
-All endpoints are under `http://localhost:8000`:
+All endpoints are under `http://localhost:8000/api`:
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/rooms` | List all rooms |
 | GET | `/personnel` | List all personnel |
-| POST | `/assign` | Assign person to best available room |
+| POST | `/assign-to-room` | Manually assign a person to a specific room |
 | POST | `/unassign` | Remove person from their room |
 | POST | `/swap` | Swap two people |
 | POST | `/move` | Move person to specific room |
@@ -104,5 +111,6 @@ All endpoints are under `http://localhost:8000`:
 | POST | `/admin/load_rooms` | Replace all rooms |
 | POST | `/admin/load_personnel` | Replace all personnel |
 | POST | `/admin/load_personnel_from_url` | Load personnel from configured URL |
+| POST | `/admin/auto_assign` | Automatically place unassigned personnel |
 | GET/PUT | `/admin/settings` | Read/update settings |
 | POST | `/auth/login` | Authenticate |

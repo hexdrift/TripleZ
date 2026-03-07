@@ -1,106 +1,173 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
-import { swapPeople, movePerson } from "@/lib/api";
-import { useAppData } from "./app-shell";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { toast } from "react-toastify";
+import { movePerson, swapPeople } from "@/lib/api";
 import { buildingHe, deptHe, rankHe } from "@/lib/hebrew";
+import { cn } from "@/lib/utils";
 import { Personnel, Room } from "@/lib/types";
-import { IconAlertCircle, IconCheck, IconSearch, IconSwap, IconMove, IconX } from "./icons";
+import { useAppData } from "./app-shell";
+import {
+  IconAlertCircle,
+  IconCheck,
+  IconMove,
+  IconSearch,
+  IconSwap,
+  IconX,
+} from "./icons";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface SwapModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-type Tab = "swap" | "move";
+const panelTransition = { duration: 0.15, ease: "easeOut" as const };
+
+function isGenderCompatible(person: Pick<Personnel, "gender"> | null | undefined, room: Pick<Room, "gender"> | null | undefined) {
+  if (!person || !room) return false;
+  return String(person.gender) === String(room.gender);
+}
+
+function isSwapPairCompatible(
+  personA: Personnel | null,
+  roomA: Room | undefined,
+  personB: Personnel | null,
+  roomB: Room | undefined,
+) {
+  if (!personA || !personB || !roomA || !roomB) return false;
+  return isGenderCompatible(personA, roomB) && isGenderCompatible(personB, roomA);
+}
 
 export function SwapModal({ open, onClose }: SwapModalProps) {
-  const [tab, setTab] = useState<Tab>("swap");
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const [tab, setTab] = useState<"swap" | "move">("swap");
 
   const handleClose = useCallback(() => {
     setTab("swap");
     onClose();
   }, [onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); handleClose(); }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [handleClose, open]);
-
   return (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          style={{ background: "rgba(0, 0, 0, 0.4)", backdropFilter: "blur(4px)" }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose(); }}
-        >
-          <motion.div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            className="surface-card w-full max-w-[640px] max-h-[calc(100vh-40px)] overflow-hidden"
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ duration: 0.2 }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <header className="px-8 py-6 border-b flex items-center justify-between" style={{ borderColor: "var(--border)" }}>
-              <div>
-                <h2 className="text-[24px] font-bold" style={{ color: "var(--text-1)" }}>החלפות והעברות</h2>
-                <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>החלפת אנשים בין חדרים או העברה לחדר אחר</p>
-              </div>
-              <button type="button" onClick={handleClose} className="btn-ghost !min-h-[36px] !px-2" aria-label="סגור">
-                <IconX size={18} />
-              </button>
-            </header>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleClose();
+      }}
+    >
+      <DialogContent
+        className="max-h-[calc(100vh-32px)] gap-0 rounded-3xl border-border/70 bg-background p-0 shadow-2xl shadow-black/10 sm:max-w-[860px]"
+        showCloseButton={false}
+      >
+        {/* Header: title + close + tabs */}
+        <div className="px-6 pt-5 pb-3">
+          <DialogDescription className="sr-only">
+            החלפה בין משובצים או העברה לחדר אחר
+          </DialogDescription>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-lg font-semibold tracking-tight text-foreground">
+              החלפות והעברות
+            </DialogTitle>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleClose}
+              aria-label="סגור"
+              className="rounded-xl text-muted-foreground hover:text-foreground"
+            >
+              <IconX size={16} />
+            </Button>
+          </div>
+        </div>
 
-            <div className="px-8 pt-4 border-b" style={{ borderColor: "var(--border)" }}>
-              <div className="flex items-center gap-2">
-                {(["swap", "move"] as Tab[]).map((t) => {
-                  const selected = tab === t;
-                  return (
-                    <button
-                      key={t}
-                      onClick={() => setTab(t)}
-                      className="px-4 py-2 rounded-t-lg border border-b-0 text-[13px] font-semibold cursor-pointer transition-colors"
-                      style={{
-                        color: selected ? "var(--accent)" : "var(--text-2)",
-                        borderColor: selected ? "var(--accent)" : "transparent",
-                        background: selected ? "var(--accent-muted)" : "transparent",
-                      }}
-                    >
-                      {t === "swap" ? "החלפה" : "העברה"}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+        {/* Tabs - full width */}
+        <div className="grid grid-cols-2 border-b border-border/70">
+          <TabButton
+            active={tab === "swap"}
+            onClick={() => setTab("swap")}
+            icon={<IconSwap size={15} />}
+            label="החלפה"
+          />
+          <TabButton
+            active={tab === "move"}
+            onClick={() => setTab("move")}
+            icon={<IconMove size={15} />}
+            label="העברה"
+          />
+        </div>
 
-            <div className="px-8 py-6 overflow-y-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
+        {/* Content */}
+        <div className="max-h-[calc(100vh-180px)] overflow-y-auto overflow-x-hidden px-8 pt-6 pb-8">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={tab}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={panelTransition}
+            >
               {tab === "swap" ? <SwapTab /> : <MoveTab />}
-            </div>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "relative flex select-none items-center justify-center gap-2 py-3.5 text-[13px] font-semibold cursor-pointer transform-gpu transition-[transform,color,opacity] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:translate-y-[0.5px] motion-reduce:transform-none motion-reduce:transition-none",
+        active
+          ? "text-foreground"
+          : "text-muted-foreground hover:text-foreground/70",
+      )}
+    >
+      {icon}
+      {label}
+      {active && (
+        <motion.div
+          layoutId="swap-tab-indicator"
+          className="absolute inset-x-0 bottom-0 h-[2px] bg-foreground"
+          transition={{ duration: 0.16, ease: "easeOut" }}
+        />
+      )}
+    </button>
   );
 }
 
 function SwapTab() {
-  const { rooms, personnel } = useAppData();
+  const { rooms, personnel, dataVersion } = useAppData();
   const [personA, setPersonA] = useState<Personnel | null>(null);
   const [personB, setPersonB] = useState<Personnel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -115,13 +182,28 @@ function SwapTab() {
     return map;
   }, [rooms]);
 
+  const roomA = personA ? roomMap.get(personA.person_id) : undefined;
+  const roomB = personB ? roomMap.get(personB.person_id) : undefined;
+  const sameRoom =
+    !!roomA &&
+    !!roomB &&
+    roomA.building_name === roomB.building_name &&
+    roomA.room_number === roomB.room_number;
+  const compatiblePair = isSwapPairCompatible(personA, roomA, personB, roomB);
+
   async function handleSwap() {
-    if (!personA || !personB) return;
+    if (!personA || !personB || sameRoom) return;
+    if (!compatiblePair) {
+      const message = "ניתן לבצע החלפה רק בין אנשים מאותו מגדר.";
+      setError(message);
+      toast.error(message);
+      return;
+    }
     setError("");
     setSuccess("");
     setLoading(true);
     try {
-      const res = await swapPeople(personA.person_id, personB.person_id);
+      const res = await swapPeople(personA.person_id, personB.person_id, dataVersion);
       if (res.ok) {
         const msg = `${personA.full_name} ו${personB.full_name} הוחלפו בהצלחה`;
         setSuccess(msg);
@@ -141,66 +223,101 @@ function SwapTab() {
   }
 
   return (
-    <div className="space-y-5">
-      <p className="text-[13px]" style={{ color: "var(--text-3)" }}>
-        בחר שני אנשים משובצים כדי להחליף ביניהם את החדרים
-      </p>
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <PickerSection label="אדם א׳">
+          <PersonPicker
+            personnel={personnel}
+            selected={personA}
+            onSelect={(p) => {
+              setPersonA(p);
+              if (p && personB) {
+                const personBRoom = roomMap.get(personB.person_id);
+                const personARoom = roomMap.get(p.person_id);
+                if (!isSwapPairCompatible(p, personARoom, personB, personBRoom)) {
+                  setPersonB(null);
+                }
+              }
+              setError("");
+              setSuccess("");
+            }}
+            excludeId={personB?.person_id}
+            onlyAssigned
+            roomMap={roomMap}
+            isSelectable={(candidate, candidateRoom) => {
+              if (!personB) return true;
+              const roomOfB = roomMap.get(personB.person_id);
+              return isSwapPairCompatible(candidate, candidateRoom, personB, roomOfB);
+            }}
+          />
+        </PickerSection>
 
-      <div>
-        <FieldLabel>אדם א׳</FieldLabel>
-        <PersonPicker
-          personnel={personnel}
-          selected={personA}
-          onSelect={setPersonA}
-          excludeId={personB?.person_id}
-          onlyAssigned
-          roomMap={roomMap}
-        />
-        {personA ? <RoomInfo room={roomMap.get(personA.person_id)} /> : null}
+        <PickerSection label="אדם ב׳">
+          <PersonPicker
+            personnel={personnel}
+            selected={personB}
+            onSelect={(p) => {
+              setPersonB(p);
+              if (p && personA) {
+                const personARoom = roomMap.get(personA.person_id);
+                const personBRoom = roomMap.get(p.person_id);
+                if (!isSwapPairCompatible(personA, personARoom, p, personBRoom)) {
+                  setPersonA(null);
+                }
+              }
+              setError("");
+              setSuccess("");
+            }}
+            excludeId={personA?.person_id}
+            onlyAssigned
+            roomMap={roomMap}
+            isSelectable={(candidate, candidateRoom) => {
+              if (!personA) return true;
+              const roomOfA = roomMap.get(personA.person_id);
+              return isSwapPairCompatible(personA, roomOfA, candidate, candidateRoom);
+            }}
+          />
+        </PickerSection>
       </div>
 
-      <div className="flex justify-center">
-        <div className="h-8 w-8 rounded-full flex items-center justify-center" style={{ background: "var(--surface-3)", color: "var(--text-3)" }}>
-          <IconSwap size={16} />
+      {sameRoom && <AlertBox type="error">שני האנשים כבר באותו חדר.</AlertBox>}
+
+      {personA && personB && !sameRoom && (
+        <div className="rounded-2xl border border-border/70 bg-muted/10 p-4">
+          <div className="space-y-3">
+            <SummaryRow person={personA} fromRoom={roomA} toRoom={roomB} />
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border/60" />
+              <span className="text-muted-foreground">
+                <IconSwap size={14} />
+              </span>
+              <div className="h-px flex-1 bg-border/60" />
+            </div>
+            <SummaryRow person={personB} fromRoom={roomB} toRoom={roomA} />
+          </div>
         </div>
-      </div>
+      )}
 
-      <div>
-        <FieldLabel>אדם ב׳</FieldLabel>
-        <PersonPicker
-          personnel={personnel}
-          selected={personB}
-          onSelect={setPersonB}
-          excludeId={personA?.person_id}
-          onlyAssigned
-          roomMap={roomMap}
-        />
-        {personB ? <RoomInfo room={roomMap.get(personB.person_id)} /> : null}
-      </div>
-
-      {error ? <AlertBox type="error">{error}</AlertBox> : null}
+      {error && !sameRoom ? <AlertBox type="error">{error}</AlertBox> : null}
       {success ? <AlertBox type="success">{success}</AlertBox> : null}
 
-      <div className="pt-2 flex justify-center">
-        <button
-          type="button"
-          onClick={handleSwap}
-          disabled={loading || !personA || !personB}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <IconSwap size={14} />
-          {loading ? "מחליף..." : "בצע החלפה"}
-        </button>
-      </div>
+      <Button
+        onClick={handleSwap}
+        disabled={loading || !personA || !personB || sameRoom || !compatiblePair}
+        className="w-full rounded-xl"
+      >
+        <IconSwap size={15} />
+        {loading ? "מחליף..." : "בצע החלפה"}
+      </Button>
     </div>
   );
 }
 
 function MoveTab() {
-  const { rooms, personnel } = useAppData();
+  const { rooms, personnel, dataVersion } = useAppData();
   const [person, setPerson] = useState<Personnel | null>(null);
   const [targetBuilding, setTargetBuilding] = useState("");
-  const [targetRoom, setTargetRoom] = useState<number | null>(null);
+  const [targetRoom, setTargetRoom] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -213,31 +330,65 @@ function MoveTab() {
     return map;
   }, [rooms]);
 
+  const currentRoom = person ? roomMap.get(person.person_id) : undefined;
+
   const buildings = useMemo(() => {
-    return [...new Set(rooms.map((r) => r.building_name))].sort();
-  }, [rooms]);
+    if (!person) return [];
+    return [...new Set(
+      rooms
+        .filter((room) => {
+          if (room.available_beds <= 0) return false;
+          if (!isGenderCompatible(person, room)) return false;
+          if (!currentRoom) return true;
+          return !(
+            room.building_name === currentRoom.building_name
+            && room.room_number === currentRoom.room_number
+          );
+        })
+        .map((room) => room.building_name),
+    )].sort();
+  }, [rooms, person, currentRoom]);
 
   const availableRooms = useMemo(() => {
-    if (!targetBuilding) return [];
+    if (!targetBuilding || !person) return [];
     return rooms
-      .filter((r) => r.building_name === targetBuilding && r.available_beds > 0)
+      .filter((room) => {
+        if (room.building_name !== targetBuilding || room.available_beds <= 0)
+          return false;
+        if (!isGenderCompatible(person, room)) return false;
+        if (!currentRoom) return true;
+        return !(
+          room.building_name === currentRoom.building_name &&
+          room.room_number === currentRoom.room_number
+        );
+      })
       .sort((a, b) => a.room_number - b.room_number);
-  }, [rooms, targetBuilding]);
+  }, [rooms, targetBuilding, currentRoom, person]);
+
+  const targetRoomDetails = availableRooms.find(
+    (room) => String(room.room_number) === targetRoom,
+  );
 
   async function handleMove() {
-    if (!person || !targetBuilding || targetRoom === null) return;
+    if (!person || !targetBuilding || !targetRoom) return;
+    const roomNumber = Number(targetRoom);
     setError("");
     setSuccess("");
     setLoading(true);
     try {
-      const res = await movePerson(person.person_id, targetBuilding, targetRoom);
+      const res = await movePerson(
+        person.person_id,
+        targetBuilding,
+        roomNumber,
+        dataVersion,
+      );
       if (res.ok) {
-        const msg = `${person.full_name} הועבר/ה למבנה ${buildingHe(targetBuilding)}, חדר ${targetRoom}`;
+        const msg = `${person.full_name} הועבר/ה למבנה ${buildingHe(targetBuilding)}, חדר ${roomNumber}`;
         setSuccess(msg);
         toast.success(msg);
         setPerson(null);
         setTargetBuilding("");
-        setTargetRoom(null);
+        setTargetRoom("");
       } else {
         setError(res.detail || "ההעברה נכשלה");
         toast.error(res.detail || "ההעברה נכשלה");
@@ -251,71 +402,158 @@ function MoveTab() {
   }
 
   return (
-    <div className="space-y-5">
-      <p className="text-[13px]" style={{ color: "var(--text-3)" }}>
-        בחר אדם משובץ והעבר אותו לחדר אחר עם מיטה פנויה
-      </p>
-
-      <div>
-        <FieldLabel>אדם</FieldLabel>
+    <div className="space-y-4">
+      <PickerSection label="אדם להעברה">
         <PersonPicker
           personnel={personnel}
           selected={person}
-          onSelect={(p) => { setPerson(p); setTargetBuilding(""); setTargetRoom(null); }}
+          onSelect={(p) => {
+            setPerson(p);
+            setTargetBuilding("");
+            setTargetRoom("");
+            setError("");
+            setSuccess("");
+          }}
           onlyAssigned
           roomMap={roomMap}
         />
-        {person ? <RoomInfo room={roomMap.get(person.person_id)} label="חדר נוכחי" /> : null}
-      </div>
+      </PickerSection>
 
-      {person ? (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <FieldLabel>מבנה יעד</FieldLabel>
-            <select
-              value={targetBuilding}
-              onChange={(e) => { setTargetBuilding(e.target.value); setTargetRoom(null); }}
-              className="control-input"
-            >
-              <option value="">בחר מבנה</option>
+      {person && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="space-y-3"
+        >
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">מבנה יעד</Label>
+            <div className="grid grid-cols-4 gap-1.5">
               {buildings.map((b) => (
-                <option key={b} value={b}>מבנה {buildingHe(b)}</option>
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => {
+                    setTargetBuilding(b);
+                    setTargetRoom("");
+                    setError("");
+                    setSuccess("");
+                  }}
+                  className={cn(
+                    "relative h-10 rounded-xl border text-[13px] font-medium cursor-pointer transform-gpu transition-[transform,background-color,color,border-color,box-shadow] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:translate-y-[0.5px] active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none",
+                    targetBuilding === b
+                      ? "border-foreground bg-foreground text-background shadow-sm"
+                      : "border-border/70 bg-background text-foreground hover:border-foreground/30 hover:bg-muted/40",
+                  )}
+                >
+                  מבנה {buildingHe(b)}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
-          <div>
-            <FieldLabel>חדר יעד</FieldLabel>
-            <select
-              value={targetRoom ?? ""}
-              onChange={(e) => setTargetRoom(e.target.value ? Number(e.target.value) : null)}
-              className="control-input"
-              disabled={!targetBuilding}
-            >
-              <option value="">בחר חדר</option>
-              {availableRooms.map((r) => (
-                <option key={r.room_number} value={r.room_number}>
-                  חדר {r.room_number} — {r.available_beds} פנויות ({rankHe(r.room_rank)}{r.departments.length > 0 ? `, ${r.departments.map(deptHe).join("/")}` : ""})
-                </option>
-              ))}
-            </select>
-          </div>
+
+          <AnimatePresence mode="wait">
+            {targetBuilding && (
+              <motion.div
+                key={targetBuilding}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.12, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">
+                      חדר יעד
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      {availableRooms.length} פנויים
+                    </span>
+                  </div>
+                  {availableRooms.length > 0 ? (
+                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                      {availableRooms.map((room) => (
+                        <button
+                          key={`${room.building_name}-${room.room_number}`}
+                          type="button"
+                          onClick={() => {
+                            setTargetRoom(String(room.room_number));
+                            setError("");
+                            setSuccess("");
+                          }}
+                          className={cn(
+                            "relative flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2 text-center cursor-pointer transform-gpu transition-[transform,background-color,color,border-color,box-shadow] duration-120 ease-[cubic-bezier(0.2,0.8,0.2,1)] active:translate-y-[0.5px] active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none",
+                            targetRoom === String(room.room_number)
+                              ? "border-foreground bg-foreground text-background shadow-sm"
+                              : "border-border/70 bg-background text-foreground hover:border-foreground/30 hover:bg-muted/40",
+                          )}
+                        >
+                          <span className="text-sm font-semibold">
+                            חדר {room.room_number}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[10px]",
+                              targetRoom === String(room.room_number)
+                                ? "text-background/70"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {room.available_beds} פנויות ·{" "}
+                            {rankHe(room.room_rank)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-border/70 px-4 py-3 text-center text-sm text-muted-foreground">
+                      אין חדרים פנויים במבנה זה
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      )}
+
+      {person && targetRoomDetails && (
+        <div className="rounded-2xl border border-border/70 bg-muted/10 p-4">
+          <SummaryRow
+            person={person}
+            fromRoom={currentRoom}
+            toRoom={targetRoomDetails}
+          />
         </div>
-      ) : null}
+      )}
 
       {error ? <AlertBox type="error">{error}</AlertBox> : null}
       {success ? <AlertBox type="success">{success}</AlertBox> : null}
 
-      <div className="pt-2 flex justify-center">
-        <button
-          type="button"
-          onClick={handleMove}
-          disabled={loading || !person || !targetBuilding || targetRoom === null}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <IconMove size={14} />
-          {loading ? "מעביר..." : "בצע העברה"}
-        </button>
-      </div>
+      <Button
+        onClick={handleMove}
+        disabled={loading || !person || !targetBuilding || !targetRoom}
+        className="w-full rounded-xl"
+      >
+        <IconMove size={15} />
+        {loading ? "מעביר..." : "בצע העברה"}
+      </Button>
+    </div>
+  );
+}
+
+function PickerSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {children}
     </div>
   );
 }
@@ -327,13 +565,15 @@ function PersonPicker({
   excludeId,
   onlyAssigned,
   roomMap,
+  isSelectable,
 }: {
   personnel: Personnel[];
   selected: Personnel | null;
-  onSelect: (p: Personnel | null) => void;
+  onSelect: (person: Personnel | null) => void;
   excludeId?: string;
   onlyAssigned?: boolean;
   roomMap: Map<string, Room>;
+  isSelectable?: (person: Personnel, room: Room | undefined) => boolean;
 }) {
   const [query, setQuery] = useState("");
   const [showList, setShowList] = useState(false);
@@ -342,129 +582,237 @@ function PersonPicker({
 
   const filtered = useMemo(() => {
     let list = personnel;
-    if (onlyAssigned) list = list.filter((p) => roomMap.has(p.person_id));
-    if (excludeId) list = list.filter((p) => p.person_id !== excludeId);
+    if (onlyAssigned)
+      list = list.filter((person) => roomMap.has(person.person_id));
+    if (excludeId)
+      list = list.filter((person) => person.person_id !== excludeId);
+    if (isSelectable) {
+      list = list.filter((person) => isSelectable(person, roomMap.get(person.person_id)));
+    }
     if (!query.trim()) return list;
-    const q = query.toLowerCase();
+    const normalizedQuery = query.toLowerCase();
     return list.filter(
-      (p) => p.person_id.toLowerCase().includes(q) || p.full_name.toLowerCase().includes(q)
+      (person) =>
+        person.person_id.toLowerCase().includes(normalizedQuery) ||
+        person.full_name.toLowerCase().includes(normalizedQuery),
     );
-  }, [personnel, query, excludeId, onlyAssigned, roomMap]);
+  }, [personnel, query, excludeId, onlyAssigned, roomMap, isSelectable]);
+
+  const visibleResults = filtered.slice(0, 6);
+  const selectedRoom = selected ? roomMap.get(selected.person_id) : undefined;
 
   useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (listRef.current && !listRef.current.contains(target) && inputRef.current && !inputRef.current.contains(target)) {
+    function onMouseDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        listRef.current &&
+        !listRef.current.contains(target) &&
+        inputRef.current &&
+        !inputRef.current.contains(target)
+      ) {
         setShowList(false);
       }
     }
+
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
   if (selected) {
     return (
-      <div
-        className="flex items-center justify-between px-3 py-2.5 rounded-xl"
-        style={{ background: "var(--surface-2)", border: "1px solid var(--accent)" }}
-      >
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold" style={{ background: "var(--surface-3)", color: "var(--text-2)" }}>
-            {selected.full_name.charAt(0)}
+      <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-background p-3">
+        <PersonAvatar person={selected} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {selected.full_name}
+            </p>
+            <span className="text-[11px] text-muted-foreground">
+              {selected.person_id}
+            </span>
           </div>
-          <div>
-            <span className="text-[13px] font-semibold" style={{ color: "var(--text-1)" }}>{selected.full_name}</span>
-            <span className="text-[11px] mr-2" style={{ color: "var(--text-3)" }}>{selected.person_id}</span>
-          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {deptHe(selected.department)} · {rankHe(selected.rank)}
+            {selectedRoom ? ` · ${roomLocationLabel(selectedRoom)}` : ""}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { onSelect(null); setQuery(""); }}
-          className="btn-ghost !min-h-[28px] !px-1.5"
-          style={{ color: "var(--text-3)" }}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => {
+            onSelect(null);
+            setQuery("");
+            setShowList(false);
+          }}
+          className="shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
         >
           <IconX size={14} />
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="relative">
-      <div className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-3)" }}>
-        <IconSearch size={14} />
+    <div>
+      <div className="relative">
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground">
+          <IconSearch size={15} />
+        </div>
+
+        <Input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setShowList(true);
+          }}
+          onFocus={() => setShowList(true)}
+          className="h-11 rounded-xl border-border/70 bg-background pr-10 shadow-none"
+          placeholder="חפש לפי שם או מזהה"
+          autoComplete="off"
+        />
       </div>
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setShowList(true); }}
-        onFocus={() => setShowList(true)}
-        className="control-input pr-10"
-        placeholder="הקלד מזהה או שם לחיפוש"
-        autoComplete="off"
-      />
-      {showList && filtered.length > 0 ? (
-        <div ref={listRef} className="absolute z-10 left-0 right-0 mt-1 surface-card max-h-[220px] overflow-y-auto p-1">
-          {filtered.slice(0, 30).map((p) => (
-            <button
-              key={p.person_id}
-              type="button"
-              onMouseDown={() => { onSelect(p); setShowList(false); setQuery(""); }}
-              className="w-full text-right px-2.5 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-              style={{ color: "var(--text-2)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              <div className="h-7 w-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0" style={{ background: "var(--surface-3)", color: "var(--text-2)" }}>
-                {p.full_name ? p.full_name.charAt(0) : p.person_id.slice(-2)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[12px] font-semibold truncate" style={{ color: "var(--text-1)" }}>{p.full_name}</p>
-                <p className="text-[11px] truncate" style={{ color: "var(--text-3)" }}>{p.person_id}</p>
-              </div>
-              <span className="badge" style={{ padding: "3px 6px" }}>{deptHe(p.department)}</span>
-            </button>
-          ))}
+
+      {showList ? (
+        <div
+          ref={listRef}
+          className="mt-1 overflow-hidden rounded-xl border border-border/70 bg-background shadow-lg"
+        >
+          {visibleResults.length > 0 ? (
+            <div className="max-h-[220px] overflow-y-auto overscroll-contain p-1">
+              {visibleResults.map((person) => {
+                const room = roomMap.get(person.person_id);
+                return (
+                  <button
+                    key={person.person_id}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onSelect(person);
+                      setShowList(false);
+                      setQuery("");
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-right transition-colors hover:bg-muted/60"
+                  >
+                    <PersonAvatar person={person} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-medium text-foreground">
+                        {person.full_name}
+                        <span className="mr-1.5 text-[11px] font-normal text-muted-foreground">
+                          {person.person_id}
+                        </span>
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {deptHe(person.department)} · {rankHe(person.rank)}
+                        {room ? ` · חדר ${room.room_number}` : ""}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+              לא נמצאו התאמות.
+            </div>
+          )}
+          {filtered.length > visibleResults.length && (
+            <div className="border-t border-border/50 px-3 py-1.5 text-center text-[11px] text-muted-foreground">
+              +{filtered.length - visibleResults.length} נוספים — חפש לסינון
+            </div>
+          )}
         </div>
       ) : null}
     </div>
   );
 }
 
-function RoomInfo({ room, label }: { room?: Room; label?: string }) {
-  if (!room) return <p className="text-[12px] mt-1.5" style={{ color: "var(--text-3)" }}>לא משובץ בחדר</p>;
+function SummaryRow({
+  person,
+  fromRoom,
+  toRoom,
+}: {
+  person: Personnel;
+  fromRoom?: Room;
+  toRoom?: Room;
+}) {
   return (
-    <div className="flex gap-1.5 mt-1.5 flex-wrap">
-      {label ? <span className="text-[11px]" style={{ color: "var(--text-3)" }}>{label}:</span> : null}
-      <span className="badge" style={{ padding: "3px 6px" }}>מבנה {buildingHe(room.building_name)}</span>
-      <span className="badge" style={{ padding: "3px 6px" }}>חדר {room.room_number}</span>
-      <span className="badge" style={{ padding: "3px 6px" }}>{rankHe(room.room_rank)}</span>
-      {room.departments.map((d) => <span key={d} className="badge" style={{ padding: "3px 6px" }}>{deptHe(d)}</span>)}
+    <div className="flex items-center gap-3">
+      <PersonAvatar person={person} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-foreground">
+          {person.full_name}
+        </p>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span>{roomShortLabel(fromRoom)}</span>
+          <span className="text-muted-foreground/60">←</span>
+          <span className="font-medium text-foreground">
+            {roomShortLabel(toRoom)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function roomShortLabel(room?: Room) {
+  if (!room) return "ללא שיבוץ";
+  return `${buildingHe(room.building_name)} · חדר ${room.room_number}`;
+}
+
+function PersonAvatar({
+  person,
+  size = "default",
+}: {
+  person: Personnel;
+  size?: "default" | "sm";
+}) {
   return (
-    <label className="block text-[12px] font-semibold mb-1.5" style={{ color: "var(--text-2)" }}>
-      {children}
-    </label>
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-lg border border-border/70 bg-muted/40 font-semibold text-foreground",
+        size === "sm" ? "size-7 text-[10px]" : "size-9 text-xs rounded-xl",
+      )}
+    >
+      {personMonogram(person)}
+    </div>
   );
 }
 
-function AlertBox({ type, children }: { type: "error" | "success"; children: React.ReactNode }) {
+function personMonogram(person: Personnel) {
+  const parts = person.full_name.trim().split(/\s+/).filter(Boolean);
+  const monogram = parts
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("");
+  return monogram || person.person_id.slice(-2);
+}
+
+function roomLocationLabel(room?: Room) {
+  if (!room) return "ללא שיבוץ";
+  return `מבנה ${buildingHe(room.building_name)} · חדר ${room.room_number}`;
+}
+
+function AlertBox({
+  type,
+  children,
+}: {
+  type: "error" | "success";
+  children: ReactNode;
+}) {
   const isError = type === "error";
+
   return (
     <div
-      className="rounded-lg px-3 py-2.5 text-[13px] flex items-start gap-2"
-      style={{
-        color: isError ? "var(--danger)" : "var(--success)",
-        background: isError ? "var(--danger-dim)" : "var(--success-dim)",
-        border: `1px solid ${isError ? "var(--danger-border)" : "var(--success-border)"}`,
-      }}
+      className={cn(
+        "flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm",
+        isError
+          ? "border border-destructive/20 bg-destructive/10 text-destructive"
+          : "border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/25 dark:text-emerald-300",
+      )}
     >
-      {isError ? <IconAlertCircle size={15} /> : <IconCheck size={15} />}
+      {isError ? <IconAlertCircle size={14} /> : <IconCheck size={14} />}
       <span>{children}</span>
     </div>
   );

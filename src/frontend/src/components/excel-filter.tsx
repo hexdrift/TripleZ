@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconArrowDown, IconArrowUp, IconArrowUpDown, IconFilter, IconSearch } from "./icons";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export type SortDir = "asc" | "desc";
 export type Filters = Record<string, Set<string>>;
@@ -37,37 +39,41 @@ export function ColumnHeader<K extends string>({
   const hasFilter = filterCol && filterOptions && filters && onFilter && setOpenFilter;
   const filterActive = hasFilter && filters[filterCol] && filters[filterCol].size > 0;
   const isOpen = hasFilter && openFilter === filterCol;
-  const filterIconRef = useRef<HTMLSpanElement>(null);
+  const filterIconRef = useRef<HTMLButtonElement>(null);
   const thRef = useRef<HTMLTableCellElement>(null);
 
   // Compute alignment once when opening, not reactively
   const alignLeft = isOpen && thRef.current ? thRef.current.getBoundingClientRect().left < 220 : false;
 
   return (
-    <th ref={thRef} className="px-4 py-3 text-right font-semibold select-none relative" style={{ color: sortActive ? "var(--text-1)" : "var(--text-3)" }}>
+    <th ref={thRef} className={`relative select-none px-4 py-3 text-right font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}>
       <div className="flex items-center gap-1">
-        <span className="cursor-pointer" onClick={() => onSort(sortKey)}>
-          {label}
-        </span>
-        <span className="cursor-pointer" onClick={() => onSort(sortKey)}>
+        <button
+          type="button"
+          onClick={() => onSort(sortKey)}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-1 hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          aria-label={`מיין לפי ${label}`}
+        >
+          <span>{label}</span>
           {sortActive ? (
             sortDir === "asc" ? <IconArrowUp size={12} /> : <IconArrowDown size={12} />
           ) : (
             <IconArrowUpDown size={12} />
           )}
-        </span>
+        </button>
         {hasFilter ? (
-          <span
+          <button
+            type="button"
             ref={filterIconRef}
-            className="cursor-pointer mr-0.5"
-            style={{ color: filterActive ? "var(--accent)" : "var(--text-3)" }}
+            className={`mr-0.5 rounded-full p-1.5 hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${filterActive ? "text-primary" : "text-muted-foreground"}`}
             onClick={(e) => {
               e.stopPropagation();
               setOpenFilter(isOpen ? null : filterCol);
             }}
+            aria-label={`סינון עמודת ${label}`}
           >
             <IconFilter size={12} />
-          </span>
+          </button>
         ) : null}
       </div>
       {isOpen ? (
@@ -151,49 +157,41 @@ function FilterDropdown({
   return (
     <div
       ref={ref}
-      className={`absolute top-full mt-1 z-30 surface-card p-2 min-w-[200px] ${alignLeft ? "left-0" : "right-0"}`}
-      style={{ boxShadow: "var(--shadow-hover)" }}
+      className={`absolute top-full z-30 mt-2 min-w-[220px] rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl ${alignLeft ? "left-0" : "right-0"}`}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Search box */}
       <div className="relative mb-1.5">
-        <div className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--text-3)" }}>
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground">
           <IconSearch size={11} />
         </div>
-        <input
+        <Input
           ref={searchRef}
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full text-[11px] py-1.5 pr-7 pl-2 rounded-md"
-          style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1px solid var(--border)", outline: "none" }}
+          className="h-7 text-[11px] py-1.5 pr-7 pl-2"
           placeholder="חיפוש..."
         />
       </div>
 
       {/* Select all */}
-      <label className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-[12px] font-semibold" style={{ color: "var(--text-2)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
-        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-      >
+      <label className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted/70">
         <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} />
         בחר הכל
       </label>
 
-      <div className="my-1" style={{ borderTop: "1px solid var(--border)" }} />
+      <div className="my-1 border-t border-border/70" />
 
       {/* Checkbox list */}
       <div className="max-h-[200px] overflow-y-auto">
         {visibleOptions.length === 0 ? (
-          <p className="text-[11px] text-center py-2" style={{ color: "var(--text-3)" }}>אין תוצאות</p>
+          <p className="text-[11px] text-center py-2 text-muted-foreground">אין תוצאות</p>
         ) : (
           visibleOptions.map((opt) => (
               <label
                 key={opt.value}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer text-[12px]"
-                style={{ color: "var(--text-2)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-[12px] text-muted-foreground hover:bg-muted/70"
               >
                 <input
                   type="checkbox"
@@ -206,21 +204,23 @@ function FilterDropdown({
         )}
       </div>
 
-      <div className="my-1" style={{ borderTop: "1px solid var(--border)" }} />
+      <div className="my-1 border-t border-border/70" />
 
       <div className="flex items-center gap-2 px-1">
-        <button
+        <Button
           type="button"
-          className="flex-1 text-[11px] font-semibold py-1.5 rounded-md cursor-pointer"
-          style={{ color: "var(--text-2)", background: "var(--surface-3)" }}
+          variant="ghost"
+          size="sm"
+          className="flex-1 text-[11px] font-semibold"
           onClick={() => { onApply(new Set()); onClose(); }}
         >
           נקה
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className="flex-1 text-[11px] font-semibold py-1.5 rounded-md cursor-pointer"
-          style={{ color: "#fff", background: "var(--accent)" }}
+          variant="default"
+          size="sm"
+          className="flex-1 text-[11px] font-semibold"
           onClick={() => {
             // If all options are selected, apply empty set (= no filter)
             const allVals = new Set(options.map((o) => o.value));
@@ -229,7 +229,7 @@ function FilterDropdown({
           }}
         >
           החל
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Toaster } from "sonner";
+import { AppShell } from "@/components/app-shell";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { Providers } from "@/components/theme-provider";
+import { LazyToastContainer } from "@/components/lazy-toast-container";
 import "@fontsource-variable/heebo";
-import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,9 +17,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
+      <head />
       <body>
-        <Providers>{children}</Providers>
-        <Toaster dir="rtl" position="bottom-left" richColors closeButton />
+        <div id="app-splash" aria-hidden="true">
+          <h1>Triple Z</h1>
+        </div>
+        <Providers>
+          <TooltipProvider>
+            <AppShell>{children}</AppShell>
+          </TooltipProvider>
+        </Providers>
+        <LazyToastContainer />
       </body>
     </html>
   );

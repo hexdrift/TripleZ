@@ -18,7 +18,7 @@ import json
 import pandas as pd
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8000/api"
 
 
 def pp(obj: object) -> str:
@@ -52,29 +52,35 @@ def show(label: str, method: str, path: str, body: object = None) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 rooms_df = pd.DataFrame([
-    {"building_name": "A", "room_number": 1, "number_of_beds": 4, "room_rank": "Director", "department": "R&D",   "gender": "M", "occupant_ids": ["101", "102"]},
-    {"building_name": "A", "room_number": 2, "number_of_beds": 3, "room_rank": "Manager",  "department": "Sales", "gender": "F", "occupant_ids": []},
-    {"building_name": "A", "room_number": 3, "number_of_beds": 2, "room_rank": "VP",       "department": "Exec",  "gender": "M", "occupant_ids": ["103"]},
-    {"building_name": "B", "room_number": 1, "number_of_beds": 4, "room_rank": "Junior",   "department": "IT",    "gender": "F", "occupant_ids": ["104"]},
-    {"building_name": "B", "room_number": 2, "number_of_beds": 3, "room_rank": "Manager",  "department": "R&D",   "gender": "M", "occupant_ids": []},
-    {"building_name": "B", "room_number": 3, "number_of_beds": 2, "room_rank": "Director", "department": "QA",    "gender": "F", "occupant_ids": []},
+    {"building_name": "א", "room_number": 1, "number_of_beds": 2, "room_rank": 'סמנכ"ל', "gender": "בנים", "designated_department": "הנהלה", "occupant_ids": ["1001"]},
+    {"building_name": "א", "room_number": 2, "number_of_beds": 2, "room_rank": 'סמנכ"ל', "gender": "בנות", "designated_department": "הנהלה", "occupant_ids": ["1002"]},
+    {"building_name": "א", "room_number": 5, "number_of_beds": 4, "room_rank": "מנהל בכיר", "gender": "בנים", "designated_department": 'מו"פ', "occupant_ids": ["2001", "2011"]},
+    {"building_name": "ב", "room_number": 3, "number_of_beds": 3, "room_rank": "מנהל", "gender": "בנות", "occupant_ids": ["3004"]},
+    {"building_name": "ג", "room_number": 7, "number_of_beds": 4, "room_rank": "זוטר", "gender": "בנים", "occupant_ids": ["4001", "4021"]},
+    {"building_name": "ד", "room_number": 9, "number_of_beds": 3, "room_rank": "זוטר", "gender": "בנות", "occupant_ids": []},
 ])
 
 personnel_df = pd.DataFrame([
-    {"person_id": "101", "full_name": "דוד לוי",        "department": "R&D",   "gender": "M", "rank": "Director"},
-    {"person_id": "102", "full_name": "יוסף כהן",       "department": "R&D",   "gender": "M", "rank": "Director"},
-    {"person_id": "103", "full_name": "אבי בן דוד",     "department": "Exec",  "gender": "M", "rank": "VP"},
-    {"person_id": "104", "full_name": "שרה מזרחי",      "department": "IT",    "gender": "F", "rank": "Junior"},
-    {"person_id": "105", "full_name": "דן פרידמן",      "department": "Sales", "gender": "M", "rank": "Manager"},
-    {"person_id": "106", "full_name": "נועה שפירא",     "department": "QA",    "gender": "F", "rank": "Director"},
-    {"person_id": "107", "full_name": "אייל גולדברג",   "department": "R&D",   "gender": "M", "rank": "Junior"},
-    {"person_id": "108", "full_name": "מאיה רוזן",      "department": "IT",    "gender": "F", "rank": "Manager"},
+    {"person_id": "1001", "full_name": "אברהם לוי", "department": "הנהלה", "gender": "בנים", "rank": 'סמנכ"ל'},
+    {"person_id": "1002", "full_name": "שרה כהן", "department": "הנהלה", "gender": "בנות", "rank": 'סמנכ"ל'},
+    {"person_id": "1003", "full_name": "יצחק מזרחי", "department": "הנהלה", "gender": "בנים", "rank": 'סמנכ"ל'},
+    {"person_id": "2001", "full_name": "דוד אזולאי", "department": 'מו"פ', "gender": "בנים", "rank": "מנהל בכיר"},
+    {"person_id": "2011", "full_name": "בנימין שמש", "department": 'מו"פ', "gender": "בנים", "rank": "מנהל בכיר"},
+    {"person_id": "2002", "full_name": "מרים שלום", "department": 'מו"פ', "gender": "בנות", "rank": "מנהל בכיר"},
+    {"person_id": "3004", "full_name": "נעמי שפירא", "department": "מכירות", "gender": "בנות", "rank": "מנהל"},
+    {"person_id": "3003", "full_name": "עמוס ריבלין", "department": "מכירות", "gender": "בנים", "rank": "מנהל"},
+    {"person_id": "4001", "full_name": "אדם אור", "department": 'מו"פ', "gender": "בנים", "rank": "זוטר"},
+    {"person_id": "4021", "full_name": "לביא ראובן", "department": 'מו"פ', "gender": "בנים", "rank": "זוטר"},
+    {"person_id": "4002", "full_name": "נועה שמיר", "department": 'מו"פ', "gender": "בנות", "rank": "זוטר"},
+    {"person_id": "4005", "full_name": "עמית חיים", "department": "מכירות", "gender": "בנים", "rank": "זוטר"},
 ])
 
 print(f"Rooms DataFrame: {len(rooms_df)} rows")
 print(rooms_df.to_string(index=False))
 print(f"\nPersonnel DataFrame: {len(personnel_df)} rows")
 print(personnel_df.to_string(index=False))
+print(f"\nCurrently assigned in rooms: {sum(len(ids) for ids in rooms_df['occupant_ids'])}")
+print(f"Unassigned personnel (sleeping at home / not yet placed): {len(personnel_df) - sum(len(ids) for ids in rooms_df['occupant_ids'])}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -117,55 +123,25 @@ show("GET /rooms — all rooms with available_beds computed",
 show("GET /links — all person_id → room mappings",
      "GET", "/links")
 
-# ── Lookup a pre-assigned person ──
-show("GET /person/{id} — lookup person 101 (pre-assigned to A#1)",
-     "GET", "/person/101")
+# ── Auto-assign everyone currently unplaced ──
+show("POST /admin/auto_assign — place all unassigned personnel",
+     "POST", "/admin/auto_assign", {})
 
-# ── Lookup an unassigned person ──
-show("GET /person/{id} — lookup person 105 (not yet assigned)",
-     "GET", "/person/105")
-
-# ── Assign a known person (rank/dept/gender resolved from personnel) ──
-show("POST /assign — assign known person 105 (auto-resolves fields)",
-     "POST", "/assign", {"person_id": "105"})
-
-# ── Verify assignment ──
-show("GET /person/{id} — verify person 105 is now assigned",
-     "GET", "/person/105")
-
-# ── Assign same person again (idempotent — returns existing room) ──
-show("POST /assign — assign 105 again (idempotent, returns same room)",
-     "POST", "/assign", {"person_id": "105"})
-
-# ── Assign a walk-in guest (not in personnel, all fields required) ──
-show("POST /assign — walk-in guest (all fields required)",
-     "POST", "/assign", {
-         "person_id": "9999",
-         "rank": "Junior",
-         "department": "IT",
-         "gender": "F",
-         "person_name": "אורח חד פעמי",
+# ── Manually assign a specific person to a chosen room ──
+show("POST /assign-to-room — place person 105 into A#2",
+     "POST", "/assign-to-room", {
+         "person_id": "105",
+         "building_name": "A",
+         "room_number": 2,
      })
 
-# ── Assign unknown person without required fields (should fail) ──
-show("POST /assign — unknown person, missing fields (should fail)",
-     "POST", "/assign", {"person_id": "88888"})
-
 # ── Unassign a person ──
-show("POST /unassign — remove walk-in guest from room",
-     "POST", "/unassign", {"person_id": "9999"})
-
-# ── Verify unassignment ──
-show("GET /person/{id} — verify walk-in is no longer assigned",
-     "GET", "/person/9999")
+show("POST /unassign — remove person 105 from room",
+     "POST", "/unassign", {"person_id": "105"})
 
 # ── Unassign someone not assigned (returns ok=false) ──
 show("POST /unassign — person not assigned (returns ok=false)",
-     "POST", "/unassign", {"person_id": "9999"})
-
-# ── Lookup unknown person (never existed) ──
-show("GET /person/{id} — completely unknown person",
-     "GET", "/person/77777")
+     "POST", "/unassign", {"person_id": "105"})
 
 # ── Upsert: update an existing room's capacity ──
 show("POST /admin/upsert_rooms — update room A#1 to 6 beds",
@@ -177,8 +153,8 @@ show("POST /admin/upsert_rooms — update room A#1 to 6 beds",
 show("POST /admin/upsert_rooms — add new room C#1",
      "POST", "/admin/upsert_rooms", {
          "rooms": [{
-             "building_name": "C", "room_number": 1, "number_of_beds": 4,
-             "room_rank": "Junior", "department": "Ops", "gender": "M",
+             "building_name": "ג", "room_number": 1, "number_of_beds": 4,
+             "room_rank": "זוטר", "designated_department": "תפעול", "gender": "בנים",
              "occupant_ids": [],
          }],
      })
@@ -209,21 +185,22 @@ print("""
   GET  /health                  → health check
   GET  /rooms                   → all rooms with available_beds
   GET  /links                   → all person_id → room mappings
-  GET  /person/{person_id}      → lookup a person's assigned room
-
-  POST /assign                  → assign person to best available room
-       body: {"person_id": "..."}
-       body: {"person_id": "...", "rank": "...", "department": "...",
-              "gender": "...", "person_name": "..."}   (walk-in)
+  GET  /personnel               → all personnel rows
 
   POST /unassign                → remove person from their room
        body: {"person_id": "..."}
+
+  POST /assign-to-room          → manually place a person in a target room
+       body: {"person_id": "...", "building_name": "A", "room_number": 1}
 
   POST /admin/load_rooms        → replace all rooms
        body: {"rooms": rooms_df.to_dict(orient="records")}
 
   POST /admin/load_personnel    → replace all personnel
        body: {"personnel": personnel_df.to_dict(orient="records")}
+
+  POST /admin/auto_assign       → place all currently unassigned personnel
+       body: {}
 
   POST /admin/upsert_rooms      → update/add specific rooms
        body: {"rooms": [{"building_name": "A", "room_number": 1, ...}]}

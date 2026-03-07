@@ -26,15 +26,6 @@ if sys.stderr is None:
     sys.stderr = open(os.devnull, "w")
 
 
-def resource_path(relative_path: str) -> str:
-    """Get absolute path to a resource, works for dev and PyInstaller."""
-    try:
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-
 def open_browser():
     """Open the app in the default browser after a short delay."""
     time.sleep(1.5)
@@ -51,10 +42,10 @@ def monitor_browser():
         try:
             if platform.system() == "Darwin":
                 result = subprocess.run(
-                    ["lsof", "-ti:8000"],
+                    ["lsof", "-nP", "-iTCP:8000", "-sTCP:ESTABLISHED"],
                     capture_output=True, text=True, timeout=2,
                 )
-                has_connections = len(result.stdout.strip()) > 0
+                has_connections = any(line.strip() for line in result.stdout.splitlines())
             else:
                 has_connections = True
 
@@ -77,7 +68,7 @@ def main():
     threading.Thread(target=monitor_browser, daemon=True).start()
     threading.Thread(target=open_browser, daemon=True).start()
 
-    def signal_handler(sig: int, frame: Optional[object]) -> None:
+    def signal_handler(_sig: int, _frame: Optional[object]) -> None:
         print("\nShutting down...")
         sys.exit(0)
 

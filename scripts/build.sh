@@ -1,6 +1,9 @@
 #!/bin/bash
 # Build script for TripleZ standalone app
+# Run from project root: ./scripts/build.sh
 set -e
+
+cd "$(dirname "$0")/.."
 
 echo "=========================================="
 echo "TripleZ - Build Script"
@@ -16,11 +19,11 @@ echo "[3/4] Building Next.js frontend..."
 cd src/frontend && npm run build && cd ../..
 
 echo "[4/4] Building standalone executable..."
-pyinstaller app.spec
+pyinstaller scripts/app.spec
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "[5/5] Creating macOS .app bundle..."
-    python3 create_app_bundle.py
+    python3 scripts/create_app_bundle.py
 fi
 
 echo ""

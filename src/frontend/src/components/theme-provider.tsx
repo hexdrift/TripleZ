@@ -9,7 +9,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <DirectionProvider dir="rtl">
       <NextThemesProvider
-        attribute="data-theme"
+        attribute="class"
         defaultTheme="light"
         enableSystem={false}
         disableTransitionOnChange

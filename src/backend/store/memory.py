@@ -15,8 +15,15 @@ class MemoryStore(RemoteStore):
         self._tables: dict[str, dict[str, dict]] = {
             "rooms": {},
             "personnel": {},
+            "app_meta": {},
+            "audit_log": {},
         }
-        self._pks = {"rooms": "room_id", "personnel": "person_id"}
+        self._pks = {
+            "rooms": "room_id",
+            "personnel": "person_id",
+            "app_meta": "key",
+            "audit_log": "event_id",
+        }
 
     def get_all(self, table: str) -> list[dict]:
         """Return all rows in the given table.
@@ -95,3 +102,8 @@ class MemoryStore(RemoteStore):
             table: Table name.
         """
         self._tables[table].clear()
+
+    def bulk_update(self, table: str, updates: list[tuple[Any, dict]]) -> None:
+        """Apply multiple updates in memory."""
+        for pk_value, row_updates in updates:
+            self.update(table, pk_value, row_updates)

@@ -1,27 +1,45 @@
-export const RANK_HE: Record<string, string> = {
-  VP: 'סמנכ"ל',
+const rankLabels: Record<string, string> = {
+  VP: "סמנכ\"ל",
   Director: "מנהל בכיר",
   Manager: "מנהל",
   Junior: "זוטר",
 };
 
-export const GENDER_HE: Record<string, string> = {
-  M: "בנים",
-  F: "בנות",
+const departmentLabels: Record<string, string> = {
+  Exec: "הנהלה",
+  Sales: "מכירות",
+  "R&D": "מו\"פ",
+  IT: "מערכות מידע",
+  QA: "בקרת איכות",
+  Ops: "תפעול",
 };
 
-let _overrides: {
-  ranks?: Record<string, string>;
-  departments?: Record<string, string>;
-  genders?: Record<string, string>;
-  buildings?: Record<string, string>;
-} = {};
+const genderLabels: Record<string, string> = {
+  M: "בנים",
+  F: "בנות",
+  MALE: "בנים",
+  FEMALE: "בנות",
+};
 
-export function setHebrewOverrides(overrides: typeof _overrides) {
-  _overrides = overrides;
+const buildingLabels: Record<string, string> = {
+  A: "א",
+  B: "ב",
+  C: "ג",
+  D: "ד",
+};
+
+export function rankHe(v: string) {
+  return rankLabels[v] ?? v;
 }
 
-export function rankHe(v: string) { return _overrides.ranks?.[v] || RANK_HE[v] || v; }
-export function deptHe(v: string) { return _overrides.departments?.[v] || v; }
-export function genderHe(v: string) { return _overrides.genders?.[v] || GENDER_HE[v] || v; }
-export function buildingHe(v: string) { return _overrides.buildings?.[v] || v; }
+export function deptHe(v: string) {
+  return departmentLabels[v] ?? v;
+}
+
+export function genderHe(v: string) {
+  return genderLabels[v.toUpperCase()] ?? v;
+}
+
+export function buildingHe(v: string) {
+  return buildingLabels[v] ?? v;
+}

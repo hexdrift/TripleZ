@@ -20,17 +20,6 @@ export interface Personnel {
   rank: string;
 }
 
-export interface AssignResponse {
-  assigned: boolean;
-  room?: {
-    building_name: string;
-    room_number: number;
-    room_rank_used: string;
-  };
-  error_code?: string;
-  error_message?: string;
-}
-
 export interface BuildingSummary {
   name: string;
   totalRooms: number;

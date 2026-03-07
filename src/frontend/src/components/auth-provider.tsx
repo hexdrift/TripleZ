@@ -2,9 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AuthState, getStoredAuth, setStoredAuth, clearStoredAuth } from "@/lib/auth";
-import { login as apiLogin } from "@/lib/api";
+import { getAuthContext, getCurrentAuth, login as apiLogin, logout as apiLogout } from "@/lib/api";
+import { toast } from "react-toastify";
 import { deptHe } from "@/lib/hebrew";
 import { IconLock, IconZzz } from "./icons";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface AuthContextValue {
   auth: AuthState;
@@ -22,9 +27,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    setAuth(getStoredAuth());
-    setChecked(true);
+    let active = true;
+
+    const hideSplash = () => {
+      const splash = document.getElementById("app-splash");
+      if (splash) {
+        splash.classList.add("hide");
+        setTimeout(() => { splash.style.display = "none"; }, 300);
+      }
+    };
+
+    void getCurrentAuth()
+      .then((session) => {
+        if (!active) return;
+        if (session.ok && session.role) {
+          const nextAuth = {
+            role: session.role as AuthState["role"],
+            department: session.department ?? null,
+          };
+          setStoredAuth(nextAuth);
+          setAuth(nextAuth);
+          return;
+        }
+
+        if (getStoredAuth()) {
+          clearStoredAuth();
+        }
+        setAuth(null);
+      })
+      .catch(() => {
+        if (!active) return;
+        if (getStoredAuth()) {
+          clearStoredAuth();
+        }
+        setAuth(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setChecked(true);
+        hideSplash();
+      });
+
+    const handleAuthExpired = () => {
+      clearStoredAuth();
+      setAuth(null);
+      toast.info("החיבור פג. יש להתחבר מחדש.");
+    };
+
+    window.addEventListener("triplez-auth-expired", handleAuthExpired);
+
+    return () => {
+      active = false;
+      window.removeEventListener("triplez-auth-expired", handleAuthExpired);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!checked || !auth || auth.role !== "manager" || !auth.department) {
+      return;
+    }
+
+    let active = true;
+    getAuthContext()
+      .then((context) => {
+        if (!active) return;
+        if (!context.departments.includes(auth.department!)) {
+          clearStoredAuth();
+          setAuth(null);
+          toast.info("זירת הניהול הוסרה מהמערכת. יש להתחבר מחדש.");
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, [auth, checked]);
 
   const handleLogin = useCallback((authState: AuthState) => {
     setStoredAuth(authState);
@@ -32,8 +110,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleLogout = useCallback(() => {
-    clearStoredAuth();
-    setAuth(null);
+    void apiLogout().catch(() => undefined).finally(() => {
+      clearStoredAuth();
+      setAuth(null);
+      toast.info("התנתקת מהמערכת");
+    });
   }, []);
 
   if (!checked) return null;
@@ -68,64 +149,68 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
         setError(res.error || "סיסמה שגויה");
       }
     } catch {
-      setError("שגיאת חיבור לשרת");
+      setError("שגיאת חיבור לשרת (Frontend: localhost:3000, API: localhost:8000)");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--surface-1)" }}>
-      <div className="surface-card w-full max-w-[380px] p-8">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: "var(--accent)", color: "white" }}>
+    <div className="min-h-screen bg-background p-6">
+      <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center">
+        <Card className="page-hero w-full max-w-[420px] overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+        <CardHeader className="flex flex-col items-center pb-0">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-primary/15 bg-primary text-primary-foreground shadow-[var(--shadow-card)]">
             <IconZzz size={28} />
           </div>
-          <h1 className="text-[28px] font-bold" style={{ color: "var(--text-1)" }}>Triple Z</h1>
-          <p className="text-[13px] mt-1" style={{ color: "var(--text-3)" }}>ניהול חדרים ומבנים</p>
-        </div>
+          <CardTitle className="text-[30px] font-bold tracking-[-0.04em] text-foreground">Triple Z</CardTitle>
+          <CardDescription className="mt-2 text-[13px] leading-6">ניהול חדרים, מבנים ושיבוצים</CardDescription>
+        </CardHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-[12px] font-semibold mb-1.5" style={{ color: "var(--text-2)" }}>
-              סיסמה
-            </label>
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--text-3)" }}>
-                <IconLock size={15} />
+        <CardContent className="pt-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label className="text-[12px] font-semibold mb-1.5 text-muted-foreground">
+                סיסמה
+              </Label>
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <IconLock size={15} />
+                </div>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(""); }}
+                  className="h-11 pl-11"
+                  placeholder="הזן סיסמה"
+                  autoFocus
+                  autoComplete="current-password"
+                />
               </div>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setError(""); }}
-                className="control-input pl-10"
-                placeholder="הזן סיסמה"
-                autoFocus
-                autoComplete="current-password"
-              />
             </div>
-          </div>
 
-          {error ? (
-            <p className="text-[12px] px-2 py-1.5 rounded-md text-center" style={{ color: "var(--danger)", background: "var(--danger-dim)" }}>
-              {error}
+            {error ? (
+              <p className="text-[12px] px-2 py-1.5 rounded-md text-center text-destructive bg-destructive/10 border border-destructive/20">
+                {error}
+              </p>
+            ) : null}
+
+            <Button
+              type="submit"
+              disabled={loading || !password.trim()}
+              className="flex w-full items-center justify-center gap-2 h-11"
+            >
+              {loading ? "מתחבר..." : "כניסה"}
+            </Button>
+          </form>
+
+          <div className="mt-6 border-t border-border/70 pt-4">
+            <p className="text-center text-[11px] text-muted-foreground">
+              מנהל מערכת או מנהל זירה
             </p>
-          ) : null}
-
-          <button
-            type="submit"
-            disabled={loading || !password.trim()}
-            className="btn-primary w-full flex items-center justify-center gap-2"
-          >
-            {loading ? "מתחבר..." : "כניסה"}
-          </button>
-        </form>
-
-        <div className="mt-6 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-          <p className="text-[11px] text-center" style={{ color: "var(--text-3)" }}>
-            מנהל מערכת או מנהל זירה
-          </p>
-        </div>
+          </div>
+        </CardContent>
+      </Card>
       </div>
     </div>
   );
@@ -134,5 +219,6 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
 /** Helper to display the current role label in Hebrew. */
 export function roleLabelHe(auth: AuthState): string {
   if (auth.role === "admin") return "מנהל מערכת";
-  return `מנהל ${deptHe(auth.department || "")}`;
+  const departmentLabel = deptHe(auth.department || "").trim();
+  return departmentLabel ? `מנהל זירת: ${departmentLabel}` : "מנהל זירה";
 }

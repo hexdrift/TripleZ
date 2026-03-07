@@ -2,16 +2,53 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Cookie, Depends, Response
 
+from src.backend.auth_session import (
+    SESSION_COOKIE_MAX_AGE,
+    SESSION_COOKIE_NAME,
+    AuthSession,
+    create_session_token,
+    decode_session_token,
+    require_authenticated,
+)
 from src.backend.schemas import LoginRequest, LoginResponse
 from src.backend.settings import load_settings
 
 router = APIRouter()
 
 
+@router.get("/auth/context")
+def auth_context(session: AuthSession = Depends(require_authenticated)) -> dict:
+    """Return authenticated auth-related runtime metadata."""
+    settings = load_settings()
+    return {
+        "departments": settings.get("departments", []),
+        "personnel_url": str(settings.get("personnel_url", "")).strip(),
+        "ranks_high_to_low": settings.get("ranks_high_to_low", []),
+        "genders": settings.get("genders", []),
+    }
+
+
+@router.get("/auth/me", response_model=LoginResponse)
+def auth_me(
+    triplez_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+) -> LoginResponse:
+    """Return the active authenticated session."""
+    if not triplez_session:
+        return LoginResponse(ok=False)
+    session = decode_session_token(triplez_session)
+    if session is None:
+        return LoginResponse(ok=False)
+    return LoginResponse(
+        ok=True,
+        role=session.role,
+        department=session.department,
+    )
+
+
 @router.post("/auth/login", response_model=LoginResponse)
-def login(req: LoginRequest) -> LoginResponse:
+def login(req: LoginRequest, response: Response) -> LoginResponse:
     """Authenticate a user by password.
 
     Args:
@@ -24,11 +61,36 @@ def login(req: LoginRequest) -> LoginResponse:
     pw = req.password.strip()
 
     if pw == settings["admin_password"]:
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=create_session_token(role="admin"),
+            max_age=SESSION_COOKIE_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            secure=False,
+            path="/",
+        )
         return LoginResponse(ok=True, role="admin")
 
     dept_passwords: dict[str, str] = settings.get("dept_passwords", {})
     for dept, dept_pw in dept_passwords.items():
         if pw == dept_pw:
+            response.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=create_session_token(role="manager", department=dept),
+                max_age=SESSION_COOKIE_MAX_AGE,
+                httponly=True,
+                samesite="lax",
+                secure=False,
+                path="/",
+            )
             return LoginResponse(ok=True, role="manager", department=dept)
 
     return LoginResponse(ok=False, error="סיסמה שגויה")
+
+
+@router.post("/auth/logout")
+def logout(response: Response) -> dict:
+    """Clear the active auth session."""
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    return {"ok": True}

@@ -10,7 +10,7 @@ while validators call the getter functions directly for live values.
 
 from __future__ import annotations
 
-from typing import Any, List, Set, Tuple
+from typing import Any, Iterable, List, Set, Tuple
 
 from pydantic import BaseModel
 
@@ -33,6 +33,72 @@ _DYNAMIC_ATTRS = {
     "ALLOWED_BUILDINGS": get_allowed_buildings,
 }
 
+_RANK_ALIASES = {
+    "VP": ("VP", 'סמנכ"ל'),
+    'סמנכ"ל': ('סמנכ"ל', "VP"),
+    'סמנכ״ל': ('סמנכ"ל', "VP"),
+    "DIRECTOR": ("Director", "מנהל בכיר"),
+    "Director": ("Director", "מנהל בכיר"),
+    "מנהל בכיר": ("מנהל בכיר", "Director"),
+    "MANAGER": ("Manager", "מנהל"),
+    "Manager": ("Manager", "מנהל"),
+    "מנהל": ("מנהל", "Manager"),
+    "JUNIOR": ("Junior", "זוטר"),
+    "Junior": ("Junior", "זוטר"),
+    "זוטר": ("זוטר", "Junior"),
+}
+
+_GENDER_ALIASES = {
+    "M": ("M", "בנים"),
+    "MALE": ("M", "בנים"),
+    "בנים": ("בנים", "M"),
+    "F": ("F", "בנות"),
+    "FEMALE": ("F", "בנות"),
+    "בנות": ("בנות", "F"),
+}
+
+_DEPARTMENT_ALIASES = {
+    "Exec": ("Exec", "הנהלה"),
+    "EXEC": ("Exec", "הנהלה"),
+    "הנהלה": ("הנהלה", "Exec"),
+    "Sales": ("Sales", "מכירות"),
+    "SALES": ("Sales", "מכירות"),
+    "מכירות": ("מכירות", "Sales"),
+    "R&D": ("R&D", 'מו"פ'),
+    "r&d": ("R&D", 'מו"פ'),
+    'מו"פ': ('מו"פ', "R&D"),
+    'מו״פ': ('מו"פ', "R&D"),
+    "IT": ("IT", "מערכות מידע"),
+    "it": ("IT", "מערכות מידע"),
+    "מערכות מידע": ("מערכות מידע", "IT"),
+    "QA": ("QA", "בקרת איכות"),
+    "qa": ("QA", "בקרת איכות"),
+    "בקרת איכות": ("בקרת איכות", "QA"),
+    "Ops": ("Ops", "תפעול"),
+    "OPS": ("Ops", "תפעול"),
+    "ops": ("Ops", "תפעול"),
+    "תפעול": ("תפעול", "Ops"),
+}
+
+_BUILDING_ALIASES = {
+    "A": ("A", "א"),
+    "a": ("A", "א"),
+    "א": ("א", "A"),
+    "מבנה א": ("א", "A"),
+    "B": ("B", "ב"),
+    "b": ("B", "ב"),
+    "ב": ("ב", "B"),
+    "מבנה ב": ("ב", "B"),
+    "C": ("C", "ג"),
+    "c": ("C", "ג"),
+    "ג": ("ג", "C"),
+    "מבנה ג": ("ג", "C"),
+    "D": ("D", "ד"),
+    "d": ("D", "ד"),
+    "ד": ("ד", "D"),
+    "מבנה ד": ("ד", "D"),
+}
+
 
 def __getattr__(name: str) -> Any:
     """Provide dynamic module-level constants backed by the settings store.
@@ -46,6 +112,25 @@ def __getattr__(name: str) -> Any:
     if name in _DYNAMIC_ATTRS:
         return _DYNAMIC_ATTRS[name]()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _candidate_values(value: str, aliases: dict[str, Iterable[str]]) -> list[str]:
+    keys = [value]
+    upper = value.upper()
+    lower = value.lower()
+    if upper not in keys:
+        keys.append(upper)
+    if lower not in keys:
+        keys.append(lower)
+
+    candidates: list[str] = []
+    for candidate in keys:
+        if candidate not in candidates:
+            candidates.append(candidate)
+        for alias_candidate in aliases.get(candidate, ()):
+            if alias_candidate not in candidates:
+                candidates.append(alias_candidate)
+    return candidates
 
 
 def normalize_rank(value: Any) -> str:
@@ -65,6 +150,10 @@ def normalize_rank(value: Any) -> str:
     s = str(value).strip()
     if not s:
         raise ValueError("rank is required")
+    allowed = get_allowed_ranks()
+    for candidate in _candidate_values(s, _RANK_ALIASES):
+        if candidate in allowed:
+            return candidate
     return s
 
 
@@ -82,10 +171,14 @@ def normalize_gender(value: Any) -> str:
     """
     if value is None:
         raise ValueError("gender is required")
-    s = str(value).strip().upper()
+    s = str(value).strip()
     if not s:
         raise ValueError("gender is required")
-    return s
+    allowed = get_allowed_genders()
+    for candidate in _candidate_values(s, _GENDER_ALIASES):
+        if candidate in allowed:
+            return candidate
+    return s.upper()
 
 
 def normalize_department(value: Any) -> str:
@@ -106,9 +199,10 @@ def normalize_department(value: Any) -> str:
     if not s:
         raise ValueError("department is required")
     allowed = get_allowed_departments()
-    if s not in allowed:
-        raise ValueError(f"Invalid department '{s}'. Allowed: {sorted(allowed)}")
-    return s
+    for candidate in _candidate_values(s, _DEPARTMENT_ALIASES):
+        if candidate in allowed:
+            return candidate
+    raise ValueError(f"Invalid department '{s}'. Allowed: {sorted(allowed)}")
 
 
 def normalize_building(value: Any) -> str:
@@ -129,9 +223,10 @@ def normalize_building(value: Any) -> str:
     if not s:
         raise ValueError("building_name is required")
     allowed = get_allowed_buildings()
-    if s not in allowed:
-        raise ValueError(f"Invalid building_name '{s}'. Allowed: {sorted(allowed)}")
-    return s
+    for candidate in _candidate_values(s, _BUILDING_ALIASES):
+        if candidate in allowed:
+            return candidate
+    raise ValueError(f"Invalid building_name '{s}'. Allowed: {sorted(allowed)}")
 
 
 def normalize_name(value: Any) -> str:

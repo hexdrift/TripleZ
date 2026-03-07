@@ -2,16 +2,20 @@
 """
 PyInstaller spec file for TripleZ
 Builds a standalone executable with embedded Next.js frontend.
+
+Run from project root:  pyinstaller scripts/app.spec
 """
 
 import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
-project_root = os.path.abspath('.')
+scripts_dir = os.path.dirname(os.path.abspath(SPECPATH if 'SPECPATH' in dir() else __file__))
+project_root = os.path.abspath(os.path.join(scripts_dir, '..'))
 
-if not os.path.exists('main.py'):
-    print("ERROR: main.py not found!")
+main_path = os.path.join(scripts_dir, 'main.py')
+if not os.path.exists(main_path):
+    print("ERROR: scripts/main.py not found!")
     sys.exit(1)
 
 # Collect pre-built Next.js frontend (static export in out/)
@@ -26,7 +30,7 @@ if os.path.exists(frontend_out):
             frontend_files.append((fp, rel))
     print(f"[OK] Collected {len(frontend_files)} frontend files")
 else:
-    print("WARNING: Frontend static export not found. Run 'cd src/frontend && pnpm build' first.")
+    print("WARNING: Frontend static export not found. Run 'cd src/frontend && npm run build' first.")
 
 # Collect backend modules
 backend_modules = collect_submodules('src.backend')
@@ -57,13 +61,13 @@ hidden_imports.extend(backend_modules)
 
 print(f"[OK] Added {len(hidden_imports)} hidden imports")
 
-runtime_hook_path = os.path.join(project_root, 'pyi_rth_backend.py')
+runtime_hook_path = os.path.join(scripts_dir, 'pyi_rth_backend.py')
 if not os.path.exists(runtime_hook_path):
     print(f"ERROR: Runtime hook not found: {runtime_hook_path}")
     sys.exit(1)
 
 a = Analysis(
-    ['main.py'],
+    [main_path],
     pathex=[project_root],
     binaries=[],
     datas=frontend_files,
@@ -108,8 +112,8 @@ exe = EXE(
 print("\n" + "=" * 60)
 print("PyInstaller spec configured for TripleZ")
 if is_macos:
-    print("Run: pyinstaller app.spec && python3 create_app_bundle.py")
+    print("Run: pyinstaller scripts/app.spec && python3 scripts/create_app_bundle.py")
 elif is_windows:
-    print("Run: pyinstaller app.spec")
+    print("Run: pyinstaller scripts/app.spec")
     print("Output: dist/TripleZ.exe")
 print("=" * 60 + "\n")

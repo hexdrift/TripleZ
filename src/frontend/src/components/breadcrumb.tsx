@@ -10,16 +10,21 @@ interface Crumb {
 
 export function Breadcrumb({ items }: { items: Crumb[] }) {
   return (
-    <nav aria-label="פירורי לחם" className="flex items-center gap-1.5 text-[13px] mb-6">
+    <nav aria-label="פירורי לחם" className="mb-6 flex flex-wrap items-center gap-2 text-[13px]">
       {items.map((item, index) => (
-        <span key={`${item.label}-${index}`} className="inline-flex items-center gap-1.5">
-          {index > 0 ? <IconChevronLeft size={13} className="opacity-50" /> : null}
+        <span key={`${item.label}-${index}`} className="inline-flex items-center gap-2">
+          {index > 0 ? <IconChevronLeft size={13} className="text-muted-foreground/70" /> : null}
           {item.href ? (
-            <Link href={item.href} className="font-semibold hover:underline" style={{ color: "var(--text-3)" }}>
+            <Link
+              href={item.href}
+              className="inline-flex items-center rounded-full border border-border/60 bg-background/75 px-3 py-1.5 font-semibold text-muted-foreground shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/70 hover:text-foreground"
+            >
               {item.label}
             </Link>
           ) : (
-            <span className="font-semibold" style={{ color: "var(--text-2)" }}>{item.label}</span>
+            <span className="inline-flex items-center rounded-full border border-primary/15 bg-primary/[0.08] px-3 py-1.5 font-semibold text-foreground shadow-[var(--shadow-inset)]">
+              {item.label}
+            </span>
           )}
         </span>
       ))}

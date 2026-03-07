@@ -1,363 +1,799 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AppShell, useAppData } from "@/components/app-shell";
-import { toast } from "sonner";
-import { getSettings, updateSettings, loadPersonnelFromUrl, uploadPersonnelFile, AppSettings } from "@/lib/api";
+import { useEffect, useRef, useState, type ChangeEventHandler } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { useAppData } from "@/components/app-shell";
+import { toast } from "react-toastify";
+import {
+  AppSettings,
+  getSettings,
+  getSetupPackage,
+  IntegrityReport,
+  importSetupPackage,
+  runPersonnelSyncNow,
+  SetupPackage,
+  updateSettings,
+} from "@/lib/api";
 import { downloadBlob } from "@/lib/export";
-import { IconPlus, IconTrash, IconCheck, IconUpload, IconDownload, IconRefresh } from "@/components/icons";
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconCheck,
+  IconChevronDown,
+  IconDownload,
+  IconEye,
+  IconEyeOff,
+  IconLock,
+  IconPlus,
+  IconRefresh,
+  IconTrash,
+  IconUpload,
+  IconUsers,
+} from "@/components/icons";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+
+const fadeUp = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -4 },
+};
+
+const stagger = {
+  animate: { transition: { staggerChildren: 0.05 } },
+};
 
 export default function SettingsPage() {
-  return (
-    <AppShell>
-      <SettingsContent />
-    </AppShell>
-  );
+  return <SettingsContent />;
 }
 
 function SettingsContent() {
-  const { auth } = useAppData();
+  const { auth, refreshPersonnel } = useAppData();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingPersonnel, setLoadingPersonnel] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exportingSetup, setExportingSetup] = useState(false);
+  const settingsImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (auth.role !== "admin") return;
-    getSettings().then(setSettings).catch((e) => setError(e.message));
+    getSettings()
+      .then((nextSettings) =>
+        setSettings(alignDepartmentPasswords(nextSettings)),
+      )
+      .catch((e: Error) => setError(e.message));
   }, [auth.role]);
+
+  function updateLocalSettings(next: AppSettings) {
+    setSaved(false);
+    setError(null);
+    setSettings(alignDepartmentPasswords(next));
+  }
 
   if (auth.role !== "admin") {
     return (
-      <div className="surface-card p-12 text-center">
-        <p className="text-[16px] font-semibold" style={{ color: "var(--text-1)" }}>הגישה מוגבלת למנהלים בלבד</p>
-      </div>
+      <motion.div {...fadeUp} transition={{ duration: 0.18 }}>
+        <Card className="page-hero overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-12 text-center">
+          <p className="text-base font-semibold text-foreground">
+            הגישה מוגבלת למנהלים בלבד
+          </p>
+        </Card>
+      </motion.div>
     );
   }
 
   if (error) {
     return (
-      <div className="surface-card p-12 text-center">
-        <p className="text-[16px] font-semibold" style={{ color: "var(--danger)" }}>{error}</p>
-      </div>
+      <motion.div {...fadeUp} transition={{ duration: 0.18 }}>
+        <Card className="page-hero overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-12 text-center">
+          <p className="text-base font-semibold text-destructive">{error}</p>
+        </Card>
+      </motion.div>
     );
   }
 
   if (!settings) {
     return (
-      <div className="surface-card p-8">
-        <div className="skeleton h-8 w-40 rounded-lg mb-4" />
+      <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-8">
+        <div className="skeleton mb-4 h-8 w-40 rounded-lg" />
         <div className="skeleton h-40 w-full rounded-lg" />
-      </div>
+      </Card>
     );
   }
 
+  const currentSettings = settings;
+
   async function handleSave() {
-    if (!settings) return;
+    const normalized = normalizeLocalSettings(currentSettings);
+    updateLocalSettings(normalized);
     setSaving(true);
-    setSaved(false);
+
     try {
-      const updated = await updateSettings(settings);
-      setSettings(updated);
+      const updated = await updateSettings(normalized);
+      updateLocalSettings(updated);
+      await refreshPersonnel(true);
+      showIntegrityReport(updated.integrity_report);
       setSaved(true);
-      toast.success("הגדרות נשמרו");
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e: any) {
-      setError(e.message);
+      toast.success("ההגדרות נשמרו");
+      window.setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה בשמירת הגדרות";
+      setError(message);
       toast.error("שגיאה בשמירת הגדרות");
     } finally {
       setSaving(false);
     }
   }
 
+  async function handleImportFile(file: File) {
+    setImporting(true);
+    setSaved(false);
+    setError(null);
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as unknown;
+
+      if (isSetupPackage(parsed)) {
+        const result = await importSetupPackage(parsed);
+        updateLocalSettings(result.settings);
+        await refreshPersonnel(true);
+        showIntegrityReport(result.integrity_report);
+        toast.success(
+          `החבילה יובאה בהצלחה: ${result.personnel_count} אנשים ו-${result.room_count} חדרים`,
+        );
+      } else {
+        const updated = await updateSettings(parsed as Partial<AppSettings>);
+        updateLocalSettings(updated);
+        await refreshPersonnel(true);
+        showIntegrityReport(updated.integrity_report);
+        toast.success("הגדרות יובאו בהצלחה");
+      }
+
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה בייבוא";
+      setError(message);
+      toast.error("הייבוא נכשל");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleExportSetup() {
+    setExportingSetup(true);
+    try {
+      const setupPackage = await getSetupPackage();
+      const blob = new Blob([JSON.stringify(setupPackage, null, 2)], {
+        type: "application/json",
+      });
+      downloadBlob(blob, "triplez_setup_package.json");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה בייצוא חבילה";
+      setError(message);
+      toast.error("שגיאה בייצוא חבילה מלאה");
+    } finally {
+      setExportingSetup(false);
+    }
+  }
+
   async function handleLoadPersonnel() {
     setLoadingPersonnel(true);
     try {
-      const res = await loadPersonnelFromUrl();
+      const updated = await updateSettings({
+        personnel_url: currentSettings.personnel_url.trim(),
+        personnel_sync_paused: currentSettings.personnel_sync_paused,
+      });
+      updateLocalSettings(updated);
+      const res = await runPersonnelSyncNow();
+      updateLocalSettings({ ...updated, sync_status: res.sync_status });
+      await refreshPersonnel(true);
+      showIntegrityReport(res.integrity_report);
       toast.success(`נטענו ${res.count} אנשי כוח אדם`);
-    } catch (e: any) {
-      toast.error(e.message || "שגיאה בטעינת כוח אדם");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה בטעינת כוח אדם";
+      toast.error(message);
     } finally {
       setLoadingPersonnel(false);
     }
   }
 
   return (
-    <>
-      {/* Header with actions */}
-      <section className="surface-card p-8 mb-7">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="section-title">הגדרות מערכת</h2>
-            <p className="text-[12px] mt-1" style={{ color: "var(--text-3)" }}>ניהול הגדרות כלליות, דרגות, מחלקות ומבנים</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="btn-ghost inline-flex items-center gap-1.5 text-[12px] cursor-pointer">
-              <IconUpload size={14} />
-              ייבוא
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  file.text().then((text) => {
-                    try {
-                      const imported = JSON.parse(text);
-                      updateSettings(imported)
-                        .then((updated) => {
-                          setSettings(updated);
-                          setSaved(true);
-                          toast.success("הגדרות יובאו בהצלחה");
-                          setTimeout(() => setSaved(false), 2000);
-                        })
-                        .catch((err) => {
-                          setError(err.message);
-                          toast.error("שגיאה בייבוא הגדרות");
-                        });
-                    } catch {
-                      setError("קובץ JSON לא תקין");
-                    }
-                  });
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                const blob = new Blob([JSON.stringify(settings, null, 2)], { type: "application/json" });
-                downloadBlob(blob, "triplez_settings.json");
+    <motion.div
+      variants={stagger}
+      initial="initial"
+      animate="animate"
+      className="space-y-6"
+    >
+      <motion.div variants={fadeUp} transition={{ duration: 0.18 }}>
+        <Card className="page-hero overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+          <CardContent className="pt-6">
+            <div
+              className="flex items-center justify-between"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
               }}
-              className="btn-ghost inline-flex items-center gap-1.5 text-[12px]"
             >
-              <IconDownload size={14} />
-              ייצוא
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="btn-primary inline-flex items-center gap-2"
-            >
-              <IconCheck size={14} />
-              {saving ? "שומר..." : saved ? "נשמר!" : "שמור שינויים"}
-            </button>
-          </div>
-        </div>
-      </section>
+              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">
+                הגדרות מערכת
+              </h2>
 
-      {/* Personnel */}
-      <section className="surface-card p-6 mb-7">
-        <h3 className="text-[16px] font-bold mb-1" style={{ color: "var(--text-1)" }}>כוח אדם</h3>
-        <p className="text-[12px] mb-4" style={{ color: "var(--text-3)" }}>טעינת רשימת כוח אדם מכתובת URL או מקובץ Excel</p>
-
-        <div className="flex items-center gap-3 mb-4">
-          <input
-            type="url"
-            value={settings.personnel_url}
-            onChange={(e) => setSettings({ ...settings, personnel_url: e.target.value })}
-            placeholder="https://example.com/personnel.xlsx"
-            className="flex-1 px-3 py-2 rounded-lg border text-[14px]"
-            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
-            dir="ltr"
-          />
-          <button
-            type="button"
-            onClick={handleLoadPersonnel}
-            disabled={loadingPersonnel || !settings.personnel_url.trim()}
-            className="btn-secondary inline-flex items-center gap-2 shrink-0"
-            style={{ opacity: loadingPersonnel || !settings.personnel_url.trim() ? 0.5 : 1 }}
-          >
-            <IconRefresh size={14} />
-            {loadingPersonnel ? "טוען..." : "טען מ-URL"}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
-          <span className="text-[12px]" style={{ color: "var(--text-3)" }}>או העלאה ידנית:</span>
-          <label className="btn-ghost inline-flex items-center gap-1.5 text-[12px] cursor-pointer">
-            <IconUpload size={14} />
-            העלאת קובץ Excel
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                uploadPersonnelFile(file)
-                  .then((res) => toast.success(`נטענו ${res.count} אנשי כוח אדם`))
-                  .catch((err) => toast.error(err.message || "שגיאה בטעינת כוח אדם"));
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </div>
-      </section>
-
-      {/* Lists grid */}
-      <div className="grid grid-cols-2 gap-6 mb-7">
-        <ListEditor
-          title="דרגות (מהגבוהה לנמוכה)"
-          items={settings.ranks_high_to_low}
-          hebrewMap={settings.hebrew.ranks}
-          onChange={(items) => setSettings({ ...settings, ranks_high_to_low: items })}
-          onHebrewChange={(map) => setSettings({ ...settings, hebrew: { ...settings.hebrew, ranks: map } })}
-        />
-        <ListEditor
-          title="זירות (מחלקות)"
-          items={settings.departments}
-          hebrewMap={settings.hebrew.departments}
-          onChange={(items) => setSettings({ ...settings, departments: items })}
-          onHebrewChange={(map) => setSettings({ ...settings, hebrew: { ...settings.hebrew, departments: map } })}
-        />
-        <ListEditor
-          title="מגדרים"
-          items={settings.genders}
-          hebrewMap={settings.hebrew.genders}
-          onChange={(items) => setSettings({ ...settings, genders: items })}
-          onHebrewChange={(map) => setSettings({ ...settings, hebrew: { ...settings.hebrew, genders: map } })}
-        />
-        <ListEditor
-          title="מבנים"
-          items={settings.buildings}
-          hebrewMap={settings.hebrew.buildings}
-          onChange={(items) => setSettings({ ...settings, buildings: items })}
-          onHebrewChange={(map) => setSettings({ ...settings, hebrew: { ...settings.hebrew, buildings: map } })}
-        />
-      </div>
-
-      {/* Passwords */}
-      <section className="surface-card p-6 mb-7">
-        <h3 className="text-[16px] font-bold mb-1" style={{ color: "var(--text-1)" }}>סיסמאות</h3>
-        <p className="text-[12px] mb-4" style={{ color: "var(--text-3)" }}>סיסמת כניסה למנהל ולמחלקות</p>
-
-        <div className="mb-5">
-          <label className="block text-[12px] font-semibold mb-1.5" style={{ color: "var(--text-2)" }}>סיסמת מנהל</label>
-          <input
-            type="text"
-            value={settings.admin_password}
-            onChange={(e) => setSettings({ ...settings, admin_password: e.target.value })}
-            className="w-full max-w-sm px-3 py-2 rounded-lg border text-[14px]"
-            style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
-            dir="ltr"
-          />
-        </div>
-
-        <h4 className="text-[14px] font-semibold mb-3" style={{ color: "var(--text-2)" }}>סיסמאות מחלקות</h4>
-        <div className="grid grid-cols-2 gap-3">
-          {settings.departments.map((dept) => {
-            const hebrewLabel = settings.hebrew.departments[dept];
-            return (
-              <div key={dept} className="flex items-center gap-2">
-                <span className="text-[13px] font-medium w-24 shrink-0 text-right" style={{ color: "var(--text-2)" }}>
-                  {hebrewLabel || dept}
-                </span>
+              <div
+                className="flex items-center gap-2"
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={importing}
+                  onClick={() => settingsImportRef.current?.click()}
+                >
+                  <IconUpload size={14} />
+                  {importing ? "מייבא..." : "ייבוא"}
+                </Button>
                 <input
-                  type="text"
+                  ref={settingsImportRef}
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleImportFile(file);
+                    e.target.value = "";
+                  }}
+                />
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportSetup}
+                  disabled={exportingSetup}
+                >
+                  <IconDownload size={14} />
+                  {exportingSetup ? "מייצא..." : "ייצוא"}
+                </Button>
+
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || importing}
+                  size="sm"
+                >
+                  {saving ? (
+                    <motion.div
+                      className="h-3.5 w-3.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
+                      animate={{ rotate: 360 }}
+                      transition={{
+                        duration: 0.7,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
+                    />
+                  ) : (
+                    <IconCheck size={14} />
+                  )}
+                  {saving ? "שומר..." : saved ? "נשמר!" : "שמירה"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div variants={fadeUp} transition={{ duration: 0.18 }}>
+          <Tabs
+            defaultValue="personnel"
+            className="space-y-5"
+            style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
+          >
+          <TabsList
+            className="grid w-full grid-cols-3 h-12 rounded-2xl"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              height: "3rem",
+              width: "100%",
+            }}
+          >
+            <TabsTrigger
+              value="personnel"
+              className="gap-2 text-[13px] data-[state=active]:font-bold"
+            >
+              <IconUpload size={15} />
+              כוח אדם
+            </TabsTrigger>
+            <TabsTrigger
+              value="lists"
+              className="gap-2 text-[13px] data-[state=active]:font-bold"
+            >
+              <IconUsers size={15} />
+              רשימות מערכת
+            </TabsTrigger>
+            <TabsTrigger
+              value="passwords"
+              className="gap-2 text-[13px] data-[state=active]:font-bold"
+            >
+              <IconLock size={15} />
+              סיסמאות
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="personnel" className="space-y-6">
+            <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+              <CardContent className="space-y-4 pt-6">
+                <div className="space-y-1">
+                  <h3 className="text-[15px] font-semibold text-foreground">טעינת כוח אדם</h3>
+                </div>
+
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <Input
+                    type="url"
+                    value={settings.personnel_url}
+                    onChange={(e) =>
+                      updateLocalSettings({
+                        ...currentSettings,
+                        personnel_url: e.target.value,
+                      })
+                    }
+                    placeholder="https://example.com/personnel.xlsx"
+                    className="flex-1"
+                    dir="ltr"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleLoadPersonnel()}
+                    disabled={
+                      loadingPersonnel || !settings.personnel_url.trim()
+                    }
+                    className="shrink-0"
+                  >
+                    <IconRefresh size={14} />
+                    {loadingPersonnel ? "מסנכרן..." : "סנכרון עכשיו"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="lists" className="space-y-3">
+            <CollapsibleListEditor
+              title="דרגות"
+              items={settings.ranks_high_to_low}
+              onChange={(items) =>
+                updateLocalSettings({
+                  ...currentSettings,
+                  ranks_high_to_low: items,
+                })
+              }
+            />
+            <CollapsibleListEditor
+              title="זירות"
+              items={settings.departments}
+              onChange={(items) =>
+                updateLocalSettings({ ...currentSettings, departments: items })
+              }
+            />
+            <CollapsibleListEditor
+              title="מבנים"
+              items={settings.buildings}
+              onChange={(items) =>
+                updateLocalSettings({ ...currentSettings, buildings: items })
+              }
+            />
+          </TabsContent>
+
+          <TabsContent value="passwords" className="space-y-3">
+            <CollapsiblePassword title="סיסמת מנהל">
+              <PasswordField
+                value={settings.admin_password}
+                onChange={(e) =>
+                  updateLocalSettings({
+                    ...currentSettings,
+                    admin_password: e.target.value,
+                  })
+                }
+                dir="ltr"
+              />
+            </CollapsiblePassword>
+            {settings.departments.map((dept) => (
+              <CollapsiblePassword key={dept} title={dept}>
+                <PasswordField
                   value={settings.dept_passwords[dept] || ""}
                   onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      dept_passwords: { ...settings.dept_passwords, [dept]: e.target.value },
+                    updateLocalSettings({
+                      ...currentSettings,
+                      dept_passwords: {
+                        ...currentSettings.dept_passwords,
+                        [dept]: e.target.value,
+                      },
                     })
                   }
-                  className="flex-1 px-3 py-1.5 rounded-lg border text-[13px]"
-                  style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
                   dir="ltr"
+                  hint={`ברירת מחדל: ${defaultDepartmentPassword(dept)}`}
                 />
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </>
+              </CollapsiblePassword>
+            ))}
+          </TabsContent>
+
+        </Tabs>
+      </motion.div>
+    </motion.div>
   );
 }
 
-function ListEditor({
+function CollapsibleListEditor({
   title,
   items,
-  hebrewMap,
   onChange,
-  onHebrewChange,
+  defaultOpen = false,
 }: {
   title: string;
   items: string[];
-  hebrewMap: Record<string, string>;
   onChange: (items: string[]) => void;
-  onHebrewChange: (map: Record<string, string>) => void;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-6 py-3 text-right cursor-pointer transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+            {items.length}
+          </span>
+          <motion.div
+            animate={{ rotate: open ? 180 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <IconChevronDown size={16} className="text-muted-foreground" />
+          </motion.div>
+        </div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="border-t border-border/60 px-6 pb-4 pt-3">
+              <ListEditorContent
+                items={items}
+                title={title}
+                onChange={onChange}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
+function ListEditorContent({
+  items,
+  title,
+  onChange,
+}: {
+  items: string[];
+  title: string;
+  onChange: (items: string[]) => void;
 }) {
   const [newItem, setNewItem] = useState("");
+  const [draftItems, setDraftItems] = useState(items);
+
+  useEffect(() => {
+    setDraftItems(items);
+  }, [items]);
+
+  function setDraftItem(index: number, value: string) {
+    setDraftItems((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function resetDraftItem(index: number, value = items[index] ?? "") {
+    setDraftItems((current) => {
+      const next = [...current];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function getCommittedDrafts() {
+    return items.map((item, index) => {
+      const draftValue = draftItems[index] ?? item;
+      const trimmed = draftValue.trim();
+      return trimmed || item;
+    });
+  }
 
   function addItem() {
-    const val = newItem.trim();
-    if (!val || items.includes(val)) return;
-    onChange([...items, val]);
+    const value = newItem.trim();
+    const nextItems = getCommittedDrafts();
+    if (!value || nextItems.includes(value)) return;
+    onChange([...nextItems, value]);
     setNewItem("");
   }
 
   function removeItem(index: number) {
-    const key = items[index];
-    const next = items.filter((_, i) => i !== index);
-    onChange(next);
-    const nextMap = { ...hebrewMap };
-    delete nextMap[key];
-    onHebrewChange(nextMap);
+    const nextItems = getCommittedDrafts();
+    onChange(nextItems.filter((_, i) => i !== index));
   }
 
-  function updateHebrew(key: string, value: string) {
-    onHebrewChange({ ...hebrewMap, [key]: value });
+  function commitItem(index: number) {
+    const currentValue = items[index] ?? "";
+    const nextValue = (draftItems[index] ?? currentValue).trim();
+
+    if (
+      !nextValue ||
+      items.some((item, itemIndex) => itemIndex !== index && item === nextValue)
+    ) {
+      resetDraftItem(index, currentValue);
+      return;
+    }
+
+    if (nextValue === currentValue) {
+      resetDraftItem(index, currentValue);
+      return;
+    }
+
+    const next = [...items];
+    next[index] = nextValue;
+    onChange(next);
+  }
+
+  function moveItem(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+    const next = [...getCommittedDrafts()];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    onChange(next);
   }
 
   return (
-    <div className="surface-card p-5">
-      <h3 className="text-[15px] font-bold mb-3" style={{ color: "var(--text-1)" }}>{title}</h3>
-      <div className="space-y-2 mb-3">
-        {items.map((item, i) => (
-          <div key={item} className="flex items-center gap-2">
-            <span className="text-[13px] font-mono w-24 shrink-0 text-right" style={{ color: "var(--text-2)" }}>{item}</span>
-            <input
+    <div className="space-y-2">
+      <AnimatePresence initial={false}>
+        {items.map((item, index) => (
+          <motion.div
+            key={`${title}-${index}`}
+            layout
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4, marginBottom: 0 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            className="flex items-center gap-2 rounded-[20px] border border-border/60 bg-background/[0.65] p-2 shadow-[var(--shadow-inset)]"
+          >
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => moveItem(index, -1)}
+                disabled={index === 0}
+                aria-label={`העבר את ${draftItems[index] ?? item} למעלה`}
+              >
+                <IconArrowUp size={14} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => moveItem(index, 1)}
+                disabled={index === items.length - 1}
+                aria-label={`העבר את ${draftItems[index] ?? item} למטה`}
+              >
+                <IconArrowDown size={14} />
+              </Button>
+            </div>
+
+            <Input
               type="text"
-              value={hebrewMap[item] || ""}
-              onChange={(e) => updateHebrew(item, e.target.value)}
-              placeholder="תרגום עברי"
-              className="flex-1 px-2 py-1 rounded-lg border text-[13px]"
-              style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
+              value={draftItems[index] ?? item}
+              onChange={(e) => setDraftItem(index, e.target.value)}
+              onBlur={() => commitItem(index)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitItem(index);
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  resetDraftItem(index, item);
+                }
+              }}
+              className="flex-1 h-8 text-sm"
             />
-            <button
-              type="button"
-              onClick={() => removeItem(i)}
-              className="p-1 rounded-lg transition-colors"
-              style={{ color: "var(--danger)" }}
+
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => removeItem(index)}
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              aria-label={`מחק את ${draftItems[index] ?? item}`}
             >
               <IconTrash size={14} />
-            </button>
-          </div>
+            </Button>
+          </motion.div>
         ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <input
+      </AnimatePresence>
+
+      <div className="flex items-center gap-2 rounded-[20px] border border-dashed border-border/60 bg-background/[0.45] p-2">
+        <Input
           type="text"
           value={newItem}
           onChange={(e) => setNewItem(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && addItem()}
           placeholder="הוסף ערך חדש..."
-          className="flex-1 px-2 py-1 rounded-lg border text-[13px]"
-          style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
-          dir="ltr"
+          className="flex-1 h-8 text-sm"
         />
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onClick={addItem}
-          className="p-1 rounded-lg transition-colors"
-          style={{ color: "var(--accent)" }}
+          className="text-primary hover:text-primary"
         >
           <IconPlus size={16} />
-        </button>
+        </Button>
       </div>
     </div>
   );
+}
+
+function CollapsiblePassword({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between px-6 py-3 text-right cursor-pointer transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
+        <motion.div
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <IconChevronDown size={16} className="text-muted-foreground" />
+        </motion.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.14, ease: "easeOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="border-t border-border/60 px-6 pb-4 pt-3">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  );
+}
+
+function PasswordField({
+  value,
+  onChange,
+  className,
+  dir,
+  hint,
+}: {
+  value: string;
+  onChange: ChangeEventHandler<HTMLInputElement>;
+  className?: string;
+  dir?: "ltr" | "rtl";
+  hint?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Input
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={onChange}
+          className={cn("pr-10 text-sm", className)}
+          dir={dir}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setVisible((current) => !current)}
+          aria-label={visible ? "הסתר סיסמה" : "הצג סיסמה"}
+          className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground"
+        >
+          {visible ? <IconEyeOff size={14} /> : <IconEye size={14} />}
+        </Button>
+      </div>
+      {hint ? (
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function uniqueClean(items: string[]) {
+  const seen = new Set<string>();
+  return items
+    .map((item) => item.trim())
+    .filter((item) => {
+      if (!item || seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+}
+
+function defaultDepartmentPassword(department: string) {
+  return `${department.trim()}123`;
+}
+
+function alignDepartmentPasswords(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    dept_passwords: Object.fromEntries(
+      settings.departments.map((department) => [
+        department,
+        settings.dept_passwords[department]?.trim() || defaultDepartmentPassword(department),
+      ]),
+    ),
+  };
+}
+
+function normalizeLocalSettings(settings: AppSettings): AppSettings {
+  const { integrity_report: _integrityReport, sync_status: _syncStatus, ...rest } = settings;
+  return alignDepartmentPasswords({
+    ...rest,
+    ranks_high_to_low: uniqueClean(rest.ranks_high_to_low),
+    departments: uniqueClean(rest.departments),
+    genders: uniqueClean(rest.genders),
+    buildings: uniqueClean(rest.buildings),
+    personnel_url: rest.personnel_url.trim(),
+    admin_password: rest.admin_password.trim(),
+  });
+}
+
+function isSetupPackage(value: unknown): value is SetupPackage {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<SetupPackage>;
+  return (
+    !!candidate.settings &&
+    Array.isArray(candidate.rooms) &&
+    Array.isArray(candidate.personnel)
+  );
+}
+
+function showIntegrityReport(report?: IntegrityReport) {
+  if (!report?.has_changes || report.messages.length === 0) return;
+  toast.info(report.messages.join(" "), { autoClose: 9000 });
 }

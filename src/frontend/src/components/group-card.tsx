@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { IconBed, IconBedOff } from "./icons";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 interface GroupCardProps {
   icon: React.ReactNode;
@@ -17,60 +18,67 @@ interface GroupCardProps {
 
 export function GroupCard({ icon, title, subtitle, totalBeds, occupiedBeds, availableBeds, occupancyRate, href }: GroupCardProps) {
   const pct = Math.round(occupancyRate * 100);
-  const tone = pct > 80 ? "badge-danger" : pct > 50 ? "badge-warning" : "badge-accent";
+  const statusClass =
+    pct > 80
+      ? "from-destructive/[0.14] to-transparent text-destructive border-destructive/20"
+      : pct > 50
+        ? "from-amber-500/[0.14] to-transparent text-amber-600 dark:text-amber-400 border-amber-500/20"
+        : "from-primary/[0.14] to-transparent text-primary border-primary/15";
+  const progressClass = pct > 80 ? "bg-destructive" : pct > 50 ? "bg-amber-500" : "bg-primary";
 
   return (
     <Link href={href} className="block">
-      <motion.div
-        className="surface-card interactive-card p-5"
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-        transition={{ duration: 0.1 }}
-      >
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl flex items-center justify-center" style={{ background: "var(--accent-muted)", color: "var(--accent)", border: "1px solid var(--accent-border)" }}>
-              {icon}
+      <Card className="page-hero gap-0 overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-hover)] active:translate-y-0">
+        <CardContent className="p-0">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary shadow-[var(--shadow-inset)]">
+                {icon}
+              </div>
+              <div>
+                <h3 className="text-[20px] font-bold leading-tight tracking-[-0.03em] text-foreground">
+                  {title}
+                </h3>
+                <p className="text-[12px] text-muted-foreground">{subtitle}</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-[18px] font-bold leading-tight" style={{ color: "var(--text-1)" }}>
-                {title}
-              </h3>
-              <p className="text-[12px]" style={{ color: "var(--text-3)" }}>{subtitle}</p>
+
+            <Badge className={`bg-gradient-to-r ${statusClass}`}>{pct}% תפוסה</Badge>
+          </div>
+
+          <div className="mb-5 rounded-[20px] border border-border/60 bg-background/70 p-3 shadow-[var(--shadow-inset)]">
+            <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+              <span>תפוסת קבוצה</span>
+              <span>{occupiedBeds} מתוך {totalBeds} מיטות</span>
+            </div>
+            <div className="h-2.5 w-full rounded-full bg-muted/80">
+              <div
+                className={`occupancy-progress h-full rounded-full ${progressClass}`}
+                style={{ width: `${pct}%` }}
+              />
             </div>
           </div>
-          <span className={`badge ${tone}`}>{pct}% תפוסה</span>
-        </div>
 
-        <div className="w-full rounded-full h-2 mb-4" style={{ background: "var(--surface-3)" }}>
-          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: occupancyColor(pct) }} />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <MiniStat icon={<IconBed size={13} />} label="מיטות" value={totalBeds} />
-          <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={occupiedBeds} tone="warning" />
-          <MiniStat icon={<IconBed size={13} />} label="פנויים" value={availableBeds} tone="accent" />
-        </div>
-      </motion.div>
+          <div className="grid grid-cols-3 gap-2">
+            <MiniStat icon={<IconBed size={13} />} label="מיטות" value={totalBeds} />
+            <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={occupiedBeds} tone="warning" />
+            <MiniStat icon={<IconBed size={13} />} label="פנויים" value={availableBeds} tone="accent" />
+          </div>
+        </CardContent>
+      </Card>
     </Link>
   );
 }
 
 function MiniStat({ icon, label, value, tone = "neutral" }: { icon: React.ReactNode; label: string; value: number; tone?: "neutral" | "accent" | "warning" }) {
-  const color = tone === "accent" ? "var(--accent)" : tone === "warning" ? "var(--warning)" : "var(--text-2)";
+  const colorClass = tone === "accent" ? "text-primary" : tone === "warning" ? "text-amber-500" : "text-muted-foreground";
   return (
-    <div className="surface-soft px-3 py-2 text-center">
-      <div className="flex items-center justify-center gap-1 mb-1" style={{ color }}>
+    <div className="rounded-2xl border border-border/60 bg-background/[0.72] px-3 py-3 text-center shadow-[var(--shadow-inset)]">
+      <div className={`flex items-center justify-center gap-1 mb-1 ${colorClass}`}>
         {icon}
-        <span className="text-[16px] font-bold leading-none">{value}</span>
+        <span className="text-[18px] font-bold leading-none tracking-[-0.03em]">{value}</span>
       </div>
-      <p className="text-[11px] font-medium" style={{ color: "var(--text-3)" }}>{label}</p>
+      <p className="text-[11px] font-semibold text-muted-foreground">{label}</p>
     </div>
   );
-}
-
-function occupancyColor(pct: number): string {
-  if (pct > 80) return "var(--danger)";
-  if (pct > 50) return "var(--warning)";
-  return "var(--accent)";
 }

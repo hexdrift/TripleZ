@@ -1,12 +1,29 @@
-import * as XLSX from "xlsx";
+import { toast } from "react-toastify";
+
+function sanitizeExcelCell(value: string) {
+  const text = String(value ?? "");
+  const trimmed = text.trimStart();
+  if (!trimmed) return text;
+  return /^[=+\-@]/.test(trimmed) ? `'${text}` : text;
+}
 
 /** Export data as a real .xlsx file. */
-export function exportToExcel(filename: string, headers: string[], rows: string[][]) {
-  const data = [headers, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+export async function exportToExcel(filename: string, headers: string[], rows: string[][]) {
+  try {
+    const XLSX = await import("xlsx");
+    const data = [
+      headers.map(sanitizeExcelCell),
+      ...rows.map((row) => row.map(sanitizeExcelCell)),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, `${filename}.xlsx`);
+    toast.success(`הקובץ ${filename}.xlsx יוצא בהצלחה`);
+  } catch (err) {
+    console.error(err);
+    toast.error("שגיאה בייצוא לאקסל");
+  }
 }
 
 /** Trigger a browser download from a Blob. */

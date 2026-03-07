@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 
-from src.backend.dependencies import bump_version, core
+from src.backend.access import person_visible_to_session, room_visible_to_department
+from src.backend.auth_session import AuthSession, require_admin, require_authenticated
+from src.backend.dependencies import bump_version, core, get_data_version, store
+from src.backend.runtime_meta import append_audit_event
 from src.backend.schemas import (
-    AssignRequest,
-    AssignResponse,
+    AssignToRoomRequest,
     MoveRequest,
-    RoomRefResponse,
     SimpleOK,
     SwapRequest,
     UnassignRequest,
@@ -18,36 +19,34 @@ from src.backend.schemas import (
 router = APIRouter()
 
 
-@router.post("/assign", response_model=AssignResponse)
-def assign(req: AssignRequest) -> AssignResponse:
-    """Assign a person to a room based on rank, department, and gender.
+def _assert_expected_version(expected_version: int | None) -> None:
+    if expected_version is None:
+        return
+    current_version = get_data_version()
+    if int(expected_version) != current_version:
+        raise HTTPException(
+            status_code=409,
+            detail="הנתונים השתנו בינתיים. יש לרענן את המסך ולנסות שוב.",
+        )
 
-    Args:
-        req: Assignment request containing person details and constraints.
 
-    Returns:
-        AssignResponse indicating success with room details, or failure with error info.
-    """
-    room_ref, err = core.assign(
-        person_id=req.person_id, rank=req.rank, department=req.department,
-        gender=req.gender, person_name=req.person_name,
-    )
-    if room_ref is None:
-        return AssignResponse(assigned=False, error_code=err["error_code"], error_message=err["error_message"])
+def _actor_department(session: AuthSession) -> str | None:
+    return session.department if session.role == "manager" else None
 
-    bump_version()
-    return AssignResponse(
-        assigned=True,
-        room=RoomRefResponse(
-            building_name=str(room_ref.building_name),
-            room_number=int(room_ref.room_number),
-            room_rank_used=str(room_ref.room_rank_used),
-        ),
-    )
+
+def _room_snapshot(building_name: str, room_number: int) -> dict | None:
+    rooms = core.rooms_with_state().to_dict(orient="records")
+    for room in rooms:
+        if str(room["building_name"]) == str(building_name) and int(room["room_number"]) == int(room_number):
+            return room
+    return None
 
 
 @router.post("/unassign", response_model=SimpleOK)
-def unassign(req: UnassignRequest) -> SimpleOK:
+def unassign(
+    req: UnassignRequest,
+    session: AuthSession = Depends(require_admin),
+) -> SimpleOK:
     """Remove a person's room assignment.
 
     Args:
@@ -56,37 +55,27 @@ def unassign(req: UnassignRequest) -> SimpleOK:
     Returns:
         SimpleOK indicating whether the unassignment succeeded.
     """
+    _assert_expected_version(req.expected_version)
     ok = core.unassign(person_id=req.person_id)
     if ok:
         bump_version()
-    return SimpleOK(ok=ok, detail=None if ok else "person_id not assigned")
-
-
-@router.get("/person/{person_id}", response_model=AssignResponse)
-def get_person_room(person_id: str) -> AssignResponse:
-    """Look up the room assignment for a given person.
-
-    Args:
-        person_id: Unique identifier of the person to look up.
-
-    Returns:
-        AssignResponse with room details if assigned, or assigned=False otherwise.
-    """
-    ref = core.get_person_room(person_id)
-    if ref is None:
-        return AssignResponse(assigned=False)
-    return AssignResponse(
-        assigned=True,
-        room=RoomRefResponse(
-            building_name=str(ref.building_name),
-            room_number=int(ref.room_number),
-            room_rank_used=str(ref.room_rank_used),
-        ),
-    )
+        append_audit_event(
+            store,
+            actor_role=session.role,
+            actor_department=_actor_department(session),
+            action="unassign",
+            entity_type="person",
+            entity_id=req.person_id,
+            message="אדם הוסר מהחדר",
+        )
+    return SimpleOK(ok=ok, detail=None if ok else "המזהה אינו משובץ כרגע לחדר")
 
 
 @router.post("/swap", response_model=SimpleOK)
-def swap(req: SwapRequest) -> SimpleOK:
+def swap(
+    req: SwapRequest,
+    session: AuthSession = Depends(require_authenticated),
+) -> SimpleOK:
     """Swap the room assignments of two people.
 
     Args:
@@ -95,14 +84,33 @@ def swap(req: SwapRequest) -> SimpleOK:
     Returns:
         SimpleOK indicating whether the swap succeeded, with error detail on failure.
     """
+    _assert_expected_version(req.expected_version)
+    person_a = store.get_by_id("personnel", str(req.person_id_a))
+    person_b = store.get_by_id("personnel", str(req.person_id_b))
+    if not person_visible_to_session(session, person_a) or not person_visible_to_session(session, person_b):
+        raise HTTPException(status_code=403, detail="אין הרשאה לבצע החלפה עבור הזירה שנבחרה")
+
     ok, err = core.swap_people(req.person_id_a, req.person_id_b)
     if ok:
         bump_version()
+        append_audit_event(
+            store,
+            actor_role=session.role,
+            actor_department=_actor_department(session),
+            action="swap",
+            entity_type="person",
+            entity_id=f"{req.person_id_a},{req.person_id_b}",
+            message="בוצעה החלפת חדרים",
+            details={"person_id_a": req.person_id_a, "person_id_b": req.person_id_b},
+        )
     return SimpleOK(ok=ok, detail=err)
 
 
 @router.post("/move", response_model=SimpleOK)
-def move(req: MoveRequest) -> SimpleOK:
+def move(
+    req: MoveRequest,
+    session: AuthSession = Depends(require_authenticated),
+) -> SimpleOK:
     """Move a person to a specific target room.
 
     Args:
@@ -111,7 +119,64 @@ def move(req: MoveRequest) -> SimpleOK:
     Returns:
         SimpleOK indicating whether the move succeeded, with error detail on failure.
     """
+    _assert_expected_version(req.expected_version)
+    person = store.get_by_id("personnel", str(req.person_id))
+    if not person_visible_to_session(session, person):
+        raise HTTPException(status_code=403, detail="אין הרשאה להעביר אדם מזירה אחרת")
+
+    if session.role == "manager":
+        target_room = _room_snapshot(req.target_building, req.target_room_number)
+        if target_room is None or not room_visible_to_department(target_room, session.department or ""):
+            raise HTTPException(status_code=403, detail="אין הרשאה להעביר לחדר יעד זה")
+
     ok, err = core.move_person(req.person_id, req.target_building, req.target_room_number)
     if ok:
         bump_version()
+        append_audit_event(
+            store,
+            actor_role=session.role,
+            actor_department=_actor_department(session),
+            action="move",
+            entity_type="person",
+            entity_id=req.person_id,
+            message="בוצעה העברה בין חדרים",
+            details={
+                "target_building": req.target_building,
+                "target_room_number": req.target_room_number,
+            },
+        )
+    return SimpleOK(ok=ok, detail=err)
+
+
+@router.post("/assign-to-room", response_model=SimpleOK)
+def assign_to_room(
+    req: AssignToRoomRequest,
+    session: AuthSession = Depends(require_authenticated),
+) -> SimpleOK:
+    _assert_expected_version(req.expected_version)
+    person = store.get_by_id("personnel", str(req.person_id))
+    if not person_visible_to_session(session, person):
+        raise HTTPException(status_code=403, detail="אין הרשאה לשבץ אדם מזירה אחרת")
+
+    if session.role == "manager":
+        target_room = _room_snapshot(req.building_name, req.room_number)
+        if target_room is None or not room_visible_to_department(target_room, session.department or ""):
+            raise HTTPException(status_code=403, detail="אין הרשאה לשבץ לחדר יעד זה")
+
+    ok, err = core.assign_person_to_room(req.person_id, req.building_name, req.room_number)
+    if ok:
+        bump_version()
+        append_audit_event(
+            store,
+            actor_role=session.role,
+            actor_department=_actor_department(session),
+            action="assign_to_room",
+            entity_type="person",
+            entity_id=req.person_id,
+            message="אדם שובץ ידנית לחדר",
+            details={
+                "building_name": req.building_name,
+                "room_number": req.room_number,
+            },
+        )
     return SimpleOK(ok=ok, detail=err)

@@ -33,9 +33,9 @@ class RankPolicy:
         """
         ranks = [normalize_rank(r) for r in ranks_high_to_low]
         if not ranks:
-            raise ValueError("RankPolicy must have at least one rank.")
+            raise ValueError("מדיניות הדרגות חייבת לכלול לפחות דרגה אחת.")
         if len(set(ranks)) != len(ranks):
-            raise ValueError("RankPolicy ranks must be unique.")
+            raise ValueError("הדרגות במדיניות חייבות להיות ייחודיות.")
         self._allowed = set(ranks)
         self._chains: Dict[str, List[str]] = {
             ranks[0]: [ranks[0]],
@@ -54,7 +54,7 @@ class RankPolicy:
             ValueError: If rank is not allowed.
         """
         if rank not in self._allowed:
-            raise ValueError(f"Invalid rank '{rank}'. Allowed: {sorted(self._allowed)}")
+            raise ValueError(f"דרגה לא תקינה '{rank}'. ערכים מותרים: {sorted(self._allowed)}")
 
     def chain(self, rank: str) -> List[str]:
         """

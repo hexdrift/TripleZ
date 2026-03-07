@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from sqlalchemy import Column, Integer, MetaData, String, Table, create_engine
+from sqlalchemy import Column, Integer, MetaData, String, Table, Text, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.backend.store.base import RemoteStore
@@ -44,19 +44,54 @@ def _build_tables(metadata: MetaData) -> dict[str, Table]:
         Column("rank", String, nullable=False),
     )
 
-    return {"rooms": rooms, "personnel": personnel}
+    app_meta = Table(
+        "app_meta",
+        metadata,
+        Column("key", String, primary_key=True),
+        Column("value", Text, nullable=False, server_default="{}"),
+    )
+
+    audit_log = Table(
+        "audit_log",
+        metadata,
+        Column("event_id", String, primary_key=True),
+        Column("created_at", String, nullable=False),
+        Column("actor_role", String, nullable=False, server_default="system"),
+        Column("actor_department", String, nullable=False, server_default=""),
+        Column("action", String, nullable=False),
+        Column("entity_type", String, nullable=False, server_default=""),
+        Column("entity_id", String, nullable=False, server_default=""),
+        Column("message", Text, nullable=False),
+        Column("details", Text, nullable=False, server_default="{}"),
+    )
+
+    return {
+        "rooms": rooms,
+        "personnel": personnel,
+        "app_meta": app_meta,
+        "audit_log": audit_log,
+    }
 
 
 class SQLAlchemyStore(RemoteStore):
     """SQLAlchemy-backed implementation of RemoteStore."""
 
     def __init__(self, database_url: str) -> None:
-        self._engine = create_engine(database_url, echo=False)
+        engine_kwargs = {"echo": False}
+        if database_url.startswith("sqlite:"):
+            engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+        self._engine = create_engine(database_url, **engine_kwargs)
         self._metadata = MetaData()
         self._tables = _build_tables(self._metadata)
         self._metadata.create_all(self._engine)
         self._Session = sessionmaker(bind=self._engine)
-        self._pks = {"rooms": "room_id", "personnel": "person_id"}
+        self._pks = {
+            "rooms": "room_id",
+            "personnel": "person_id",
+            "app_meta": "key",
+            "audit_log": "event_id",
+        }
 
     def _session(self) -> Session:
         return self._Session()
@@ -111,4 +146,14 @@ class SQLAlchemyStore(RemoteStore):
         tbl = self._tables[table]
         with self._session() as session:
             session.execute(tbl.delete())
+            session.commit()
+
+    def bulk_update(self, table: str, updates: list[tuple[Any, dict]]) -> None:
+        tbl = self._tables[table]
+        pk_col = tbl.c[self._pks[table]]
+        with self._session() as session:
+            for pk_value, row_updates in updates:
+                session.execute(
+                    tbl.update().where(pk_col == str(pk_value)).values(**row_updates)
+                )
             session.commit()
