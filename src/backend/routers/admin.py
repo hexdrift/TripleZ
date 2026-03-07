@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import io
-import json
 import logging
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
@@ -20,8 +19,8 @@ from config import (
     normalize_name,
     normalize_rank,
 )
-from src.backend.auth_session import AuthSession, require_admin, require_admin_or_api_key
-from src.backend.dependencies import bump_version, core, get_data_version, mutation_lock, store
+from src.backend.auth_session import AuthSession, require_admin
+from src.backend.dependencies import bump_version, core, get_data_version, store
 from src.backend.runtime_meta import (
     append_audit_event,
     get_sync_status,
@@ -157,14 +156,6 @@ def _normalize_personnel_records(df: pd.DataFrame) -> list[dict]:
 
 
 def _serialize_personnel_rows(rows: list[dict]) -> list[dict]:
-    """Normalize personnel rows to a canonical set of fields, sorted by person_id.
-
-    Args:
-        rows: Raw personnel dicts from the store.
-
-    Returns:
-        Sorted list of dicts with only the canonical personnel fields.
-    """
     return sorted(
         [
             {
@@ -181,118 +172,57 @@ def _serialize_personnel_rows(rows: list[dict]) -> list[dict]:
 
 
 def _load_personnel_records(records: list[dict]) -> dict:
-    """Persist normalized personnel rows and reconcile room state.
+    """Persist normalized personnel rows and reconcile room state."""
+    personnel_backup = store.get_all("personnel")
+    rooms_backup = store.get_all("rooms")
 
-    Args:
-        records: List of canonical personnel dicts to load.
+    current_rows = _serialize_personnel_rows(store.get_all("personnel"))
+    next_rows = _serialize_personnel_rows(records)
+    if current_rows == next_rows:
+        return {
+            "ok": True,
+            "count": len(next_rows),
+            "changed": False,
+            "room_state_changed": False,
+            "integrity_report": {
+                "has_changes": False,
+                "removed_personnel_count": 0,
+                "removed_room_count": 0,
+                "cleared_room_designations_count": 0,
+                "removed_unknown_occupants_count": 0,
+                "removed_incompatible_occupants_count": 0,
+                "removed_duplicate_assignments_count": 0,
+                "trimmed_over_capacity_count": 0,
+                "messages": [],
+                "message": "",
+            },
+        }
 
-    Returns:
-        Result dict with ok status, count, change flags, integrity report,
-        and optional removed-occupant / auto-reassigned details.
-    """
-    with mutation_lock():
-        personnel_backup = store.get_all("personnel")
-        rooms_backup = store.get_all("rooms")
-
-        current_rows = _serialize_personnel_rows(store.get_all("personnel"))
-        next_rows = _serialize_personnel_rows(records)
-        if current_rows == next_rows:
-            return {
-                "ok": True,
-                "count": len(next_rows),
-                "changed": False,
-                "room_state_changed": False,
-                "integrity_report": {
-                    "has_changes": False,
-                    "removed_personnel_count": 0,
-                    "removed_room_count": 0,
-                    "cleared_room_designations_count": 0,
-                    "removed_unknown_occupants_count": 0,
-                    "removed_incompatible_occupants_count": 0,
-                    "removed_duplicate_assignments_count": 0,
-                    "trimmed_over_capacity_count": 0,
-                    "messages": [],
-                    "message": "",
-                },
-            }
-
-        old_personnel_map = {str(p["person_id"]): p for p in personnel_backup}
-
-        old_room_assignments: dict[str, dict] = {}
-        for room in rooms_backup:
-            for pid in json.loads(room.get("occupant_ids", "[]")):
-                old_room_assignments[str(pid)] = {
-                    "building_name": room["building_name"],
-                    "room_number": int(room["room_number"]),
-                }
-
-        try:
-            df = pd.DataFrame(records, columns=list(core.REQUIRED_PERSONNEL_COLS))
-            new_person_ids = {str(r["person_id"]) for r in records}
-            core.load_personnel(df)
-
-            auto_reassigned = _restore_returning_personnel(new_person_ids)
-
-            integrity_report = core.reconcile_runtime_state()
-
-            removed_occupants = integrity_report.get("removed_occupants", [])
-            enriched_removed: list[dict] = []
-            if removed_occupants:
-                enriched_removed = _save_stripped_assignments(
-                    removed_occupants, old_personnel_map, old_room_assignments,
-                )
-
-            result: dict = {
-                "ok": True,
-                "count": len(df),
-                "changed": True,
-                "room_state_changed": bool(integrity_report.get("has_changes")) or bool(auto_reassigned),
-                "integrity_report": integrity_report,
-            }
-
-            if enriched_removed:
-                result["removed_occupants"] = {
-                    "items": enriched_removed,
-                    "message": f"{len(enriched_removed)} אנשים הוסרו משיבוצים ושמורים לחזרה",
-                    "excel_base64": _build_removed_occupants_excel(enriched_removed),
-                }
-
-            if auto_reassigned:
-                result["auto_reassigned"] = auto_reassigned
-
-            return result
-        except Exception:
-            _restore_table("rooms", rooms_backup)
-            _restore_table("personnel", personnel_backup)
-            raise
+    try:
+        df = pd.DataFrame(records, columns=list(core.REQUIRED_PERSONNEL_COLS))
+        core.load_personnel(df)
+        integrity_report = core.reconcile_runtime_state()
+        return {
+            "ok": True,
+            "count": len(df),
+            "changed": True,
+            "room_state_changed": bool(integrity_report.get("has_changes")),
+            "integrity_report": integrity_report,
+        }
+    except Exception:
+        _restore_table("rooms", rooms_backup)
+        _restore_table("personnel", personnel_backup)
+        raise
 
 
 def load_personnel_dataframe(df: pd.DataFrame) -> dict:
-    """Normalize, validate, and persist a personnel DataFrame.
-
-    Args:
-        df: Raw personnel DataFrame (may have Hebrew column names).
-
-    Returns:
-        Result dict from ``_load_personnel_records``.
-    """
+    """Normalize, validate, and persist a personnel DataFrame."""
     records = _normalize_personnel_records(df)
     return _load_personnel_records(records)
 
 
 def load_personnel_from_url_source(url: str) -> dict:
-    """Fetch personnel from a remote URL and load it into the runtime store.
-
-    Args:
-        url: Remote URL pointing to an Excel or CSV personnel file.
-
-    Returns:
-        Result dict from ``load_personnel_dataframe``.
-
-    Raises:
-        ValueError: If the URL is empty or fails validation.
-        requests.RequestException: On network or HTTP errors.
-    """
+    """Fetch personnel from a remote URL and load it into the runtime store."""
     safe_url = validate_personnel_source_url(url)
     if not safe_url:
         raise ValueError("כתובת URL לכוח אדם לא הוגדרה בהגדרות")
@@ -311,19 +241,7 @@ def load_personnel_from_url_source(url: str) -> dict:
 
 
 def _fetch_personnel_source_response(url: str, *, max_redirects: int = 5) -> tuple[requests.Response, str]:
-    """Fetch a personnel source while revalidating every redirect target.
-
-    Args:
-        url: Starting URL to fetch.
-        max_redirects: Maximum number of redirect hops allowed.
-
-    Returns:
-        Tuple of (response, final_url) after following redirects.
-
-    Raises:
-        ValueError: If a redirect target fails URL validation or too many
-            redirects are encountered.
-    """
+    """Fetch a personnel source while revalidating every redirect target."""
     current_url = validate_personnel_source_url(url)
     session = requests.Session()
 
@@ -347,9 +265,6 @@ def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
         "person_id": "מזהה",
         "building_name": "מבנה",
         "room_number": "חדר",
-        "room_gender": "מגדר חדר",
-        "room_rank": "דרגת חדר",
-        "designated_department": "זירה ייעודית",
     })
     df = _sanitize_excel_dataframe(df)
     buf = io.BytesIO()
@@ -360,12 +275,7 @@ def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
 def _validate_occupant_ids(df: pd.DataFrame) -> list[dict]:
     """Validate occupant_ids against known personnel, removing unknown ones in-place.
 
-    Args:
-        df: Rooms DataFrame whose ``occupant_ids`` column is mutated to
-            contain only known person IDs.
-
-    Returns:
-        List of dicts describing unknown personnel that were stripped.
+    Returns list of unknown personnel dicts.
     """
     known_ids = core.get_known_personnel_ids()
     unknown_personnel: list[dict] = []
@@ -388,168 +298,14 @@ def _validate_occupant_ids(df: pd.DataFrame) -> list[dict]:
                     "person_id": pid_str,
                     "building_name": str(row.get("building_name", "")),
                     "room_number": str(row.get("room_number", "")),
-                    "room_gender": str(row.get("gender", "")),
-                    "room_rank": str(row.get("room_rank", "")),
-                    "designated_department": str(row.get("designated_department", "")),
                 })
         df.at[idx, "occupant_ids"] = valid_ids
 
     return unknown_personnel
 
 
-def _build_removed_occupants_excel(removed: list[dict]) -> str:
-    """Build an Excel file from removed occupants and return as base64 string."""
-    df = pd.DataFrame(removed)
-    df = df.rename(columns={
-        "person_id": "מזהה",
-        "full_name": "שם מלא",
-        "department": "זירה",
-        "gender": "מגדר",
-        "rank": "דרגה",
-        "building_name": "מבנה",
-        "room_number": "חדר",
-    })
-    df = _sanitize_excel_dataframe(df)
-    buf = io.BytesIO()
-    df.to_excel(buf, index=False, engine="openpyxl")
-    return base64.b64encode(buf.getvalue()).decode("ascii")
-
-
-def _save_stripped_assignments(
-    removed_occupants: list[dict],
-    old_personnel_map: dict[str, dict],
-    old_room_assignments: dict[str, dict],
-) -> list[dict]:
-    """Save stripped occupants to saved_assignments table.
-
-    Args:
-        removed_occupants: List of dicts with at least a ``person_id`` key,
-            representing occupants removed during reconciliation.
-        old_personnel_map: Mapping of person_id to their pre-sync personnel
-            record.
-        old_room_assignments: Mapping of person_id to their pre-sync room
-            assignment (building_name and room_number).
-
-    Returns:
-        Enriched list of removed occupants with full personnel and room
-        details.
-    """
-    now = datetime.now(timezone.utc).isoformat()
-    enriched: list[dict] = []
-
-    for entry in removed_occupants:
-        pid = entry["person_id"]
-        person = old_personnel_map.get(pid)
-        if person is None:
-            continue
-
-        room_info = old_room_assignments.get(pid, entry)
-        record = {
-            "person_id": pid,
-            "building_name": str(room_info.get("building_name", "")),
-            "room_number": int(room_info.get("room_number", 0)),
-            "full_name": str(person.get("full_name", "")),
-            "department": str(person.get("department", "")),
-            "gender": str(person.get("gender", "")),
-            "rank": str(person.get("rank", "")),
-            "saved_at": now,
-        }
-
-        existing = store.get_by_id("saved_assignments", pid)
-        if existing:
-            store.update("saved_assignments", pid, record)
-        else:
-            store.insert("saved_assignments", record)
-
-        enriched.append(record)
-
-    return enriched
-
-
-def _restore_returning_personnel(new_person_ids: set[str]) -> list[dict]:
-    """Auto-reassign returning people from saved_assignments.
-
-    Args:
-        new_person_ids: Set of person IDs present in the incoming personnel
-            data.
-
-    Returns:
-        List of dicts describing people who were automatically reassigned
-        back to their saved rooms.
-    """
-    settings = load_settings()
-    policy = settings.get("bed_reservation_policy", "reserve")
-
-    saved = store.get_all("saved_assignments")
-    if not saved:
-        return []
-
-    reassigned: list[dict] = []
-    for entry in saved:
-        pid = entry["person_id"]
-        if pid not in new_person_ids:
-            continue
-
-        building = entry["building_name"]
-        room_number = int(entry["room_number"])
-        room_id = f"{building}__{room_number}"
-        room = store.get_by_id("rooms", room_id)
-        if room is None:
-            store.delete("saved_assignments", pid)
-            continue
-
-        person = store.get_by_id("personnel", pid)
-        if person is None:
-            store.delete("saved_assignments", pid)
-            continue
-
-        if person["gender"] != room["gender"]:
-            store.delete("saved_assignments", pid)
-            continue
-
-        occupant_ids = json.loads(room["occupant_ids"])
-        if pid in occupant_ids:
-            store.delete("saved_assignments", pid)
-            continue
-
-        available = room["number_of_beds"] - len(occupant_ids)
-        if available <= 0:
-            store.delete("saved_assignments", pid)
-            continue
-
-        occupant_ids.append(pid)
-        store.update("rooms", room_id, {"occupant_ids": json.dumps(occupant_ids)})
-        store.delete("saved_assignments", pid)
-        reassigned.append({
-            "person_id": pid,
-            "full_name": person["full_name"],
-            "building_name": building,
-            "room_number": room_number,
-        })
-
-    return reassigned
-
-
-def _purge_orphan_saved_assignments() -> None:
-    """Delete saved_assignments referencing rooms that no longer exist."""
-    room_ids = {r["room_id"] for r in store.get_all("rooms")}
-    for sa in store.get_all("saved_assignments"):
-        room_id = f"{sa['building_name']}__{sa['room_number']}"
-        if room_id not in room_ids:
-            store.delete("saved_assignments", sa["person_id"])
-
-
 def _build_warnings(unknown_personnel: list[dict]) -> dict:
-    """Build the warnings dict for unknown personnel, or empty dict.
-
-    Args:
-        unknown_personnel: List of dicts describing personnel IDs found in
-            room occupant lists but not in the personnel table.
-
-    Returns:
-        Dict with a ``warnings`` key containing message, details, and an
-        Excel base64 attachment, or an empty dict when there are none.
-    """
+    """Build the warnings dict for unknown personnel, or empty dict."""
     if not unknown_personnel:
         return {}
     return {
@@ -562,40 +318,16 @@ def _build_warnings(unknown_personnel: list[dict]) -> dict:
 
 
 def _restore_table(table: str, rows: list[dict[str, object]]) -> None:
-    """Replace all rows of a store table with the given backup rows.
-
-    Args:
-        table: Store table name to restore.
-        rows: List of row dicts to insert after clearing.
-    """
     store.delete_all(table)
     for row in rows:
         store.insert(table, row)
 
 
 def _actor_department(session: AuthSession | None) -> str | None:
-    """Extract the actor's department for audit logging.
-
-    Args:
-        session: The current authenticated session, or None.
-
-    Returns:
-        The department name when the actor is a manager, otherwise None.
-    """
     return session.department if session and session.role == "manager" else None
 
 
 def _assert_expected_version(expected_version: int | None) -> None:
-    """Raise HTTP 409 if the client's expected version is stale.
-
-    Args:
-        expected_version: Data version the client last saw, or None to skip
-            the check.
-
-    Raises:
-        HTTPException: 409 when the current server version differs from
-            ``expected_version``.
-    """
     if expected_version is None:
         return
     current_version = get_data_version()
@@ -607,15 +339,6 @@ def _assert_expected_version(expected_version: int | None) -> None:
 
 
 def _sync_status_base_update(*, trigger: str) -> dict:
-    """Build the base sync-status update fields for a sync attempt.
-
-    Args:
-        trigger: Label describing what initiated the sync (e.g. "manual",
-            "scheduled").
-
-    Returns:
-        Dict with ``last_attempt_at`` timestamp and ``last_trigger``.
-    """
     return {
         "last_attempt_at": datetime.now(timezone.utc).isoformat(),
         "last_trigger": trigger,
@@ -629,22 +352,6 @@ def run_personnel_sync_from_configured_source(
     actor_role: str = "system",
     actor_department: str | None = None,
 ) -> dict:
-    """Execute a full personnel sync from the configured remote source.
-
-    Args:
-        url: Remote personnel source URL.
-        trigger: Label describing what initiated the sync.
-        actor_role: Role to record in the audit log entry.
-        actor_department: Department to record in the audit log entry.
-
-    Returns:
-        Result dict from ``load_personnel_from_url_source`` with count,
-        change flags, and integrity report.
-
-    Raises:
-        ValueError: If the URL is empty or fails validation.
-        requests.RequestException: On network or HTTP errors.
-    """
     safe_url = validate_personnel_source_url(url)
     if not safe_url:
         raise ValueError("כתובת URL לכוח אדם לא הוגדרה בהגדרות")
@@ -680,17 +387,6 @@ def run_personnel_sync_from_configured_source(
         last_count=result["count"],
         last_changed=bool(result["changed"] or result["room_state_changed"]),
     )
-    sync_audit_details: dict = {
-        "trigger": trigger,
-        "count": result["count"],
-        "changed": result["changed"],
-        "room_state_changed": result["room_state_changed"],
-        "integrity_report": result["integrity_report"],
-    }
-    if result.get("removed_occupants"):
-        sync_audit_details["removed_occupants"] = result["removed_occupants"]["items"]
-    if result.get("auto_reassigned"):
-        sync_audit_details["auto_reassigned"] = result["auto_reassigned"]
     append_audit_event(
         store,
         actor_role=actor_role,
@@ -699,7 +395,13 @@ def run_personnel_sync_from_configured_source(
         entity_type="personnel",
         entity_id="source",
         message=f"סנכרון כוח אדם הושלם ({trigger})",
-        details=sync_audit_details,
+        details={
+            "trigger": trigger,
+            "count": result["count"],
+            "changed": result["changed"],
+            "room_state_changed": result["room_state_changed"],
+            "integrity_report": result["integrity_report"],
+        },
     )
     return result
 
@@ -723,7 +425,6 @@ def admin_load_rooms(
         df = pd.DataFrame([model_to_dict(r) for r in req.rooms])
         unknown = _validate_occupant_ids(df)
         core.load_rooms(df)
-        _purge_orphan_saved_assignments()
         bump_version()
         warnings = _build_warnings(unknown)
         append_audit_event(
@@ -755,16 +456,12 @@ def admin_upsert_rooms(
         Dict with counts of updated, added, and total rooms.
     """
     try:
-        with mutation_lock():
-            _assert_expected_version(req.expected_version)
-            df = pd.DataFrame([model_to_dict(r, exclude_unset=True) for r in req.rooms])
-            if df.empty:
-                return {"updated": 0, "added": 0, "total_rooms": len(core.rooms_with_state())}
-            result = core.upsert_rooms(df)
-            integrity_report = core.reconcile_runtime_state()
-            bump_version()
-            if integrity_report.get("has_changes"):
-                result["integrity_report"] = integrity_report
+        _assert_expected_version(req.expected_version)
+        df = pd.DataFrame([model_to_dict(r, exclude_unset=True) for r in req.rooms])
+        if df.empty:
+            return {"updated": 0, "added": 0, "total_rooms": len(core.rooms_with_state())}
+        result = core.upsert_rooms(df)
+        bump_version()
         append_audit_event(
             store,
             actor_role=session.role,
@@ -783,7 +480,7 @@ def admin_upsert_rooms(
 @router.post("/load_personnel")
 def admin_load_personnel(
     req: PersonnelLoadRequest,
-    session: AuthSession = Depends(require_admin_or_api_key),
+    session: AuthSession = Depends(require_admin),
 ) -> dict:
     """Replace all personnel with the provided list.
 
@@ -798,14 +495,6 @@ def admin_load_personnel(
         result = load_personnel_dataframe(df)
         if result["changed"] or result["room_state_changed"]:
             bump_version()
-        audit_details: dict = {
-            "count": result["count"],
-            "integrity_report": result["integrity_report"],
-        }
-        if result.get("removed_occupants"):
-            audit_details["removed_occupants"] = result["removed_occupants"]["items"]
-        if result.get("auto_reassigned"):
-            audit_details["auto_reassigned"] = result["auto_reassigned"]
         append_audit_event(
             store,
             actor_role=session.role,
@@ -814,18 +503,16 @@ def admin_load_personnel(
             entity_type="personnel",
             entity_id="bulk",
             message="רשימת כוח האדם הוחלפה ידנית",
-            details=audit_details,
+            details={
+                "count": result["count"],
+                "integrity_report": result["integrity_report"],
+            },
         )
-        response: dict = {
+        return {
             "ok": True,
             "count": result["count"],
             "integrity_report": result["integrity_report"],
         }
-        if result.get("removed_occupants"):
-            response["removed_occupants"] = result["removed_occupants"]
-        if result.get("auto_reassigned"):
-            response["auto_reassigned"] = result["auto_reassigned"]
-        return response
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -848,7 +535,6 @@ def admin_create_personnel(
         row = model_to_dict(req)
         row["person_id"] = person_id
         store.insert("personnel", row)
-        bump_version()
         append_audit_event(
             store,
             actor_role=session.role,
@@ -895,7 +581,6 @@ async def upload_rooms_file(
 
         unknown = _validate_occupant_ids(df)
         core.load_rooms(df)
-        _purge_orphan_saved_assignments()
         bump_version()
         warnings = _build_warnings(unknown)
         append_audit_event(
@@ -926,11 +611,10 @@ def set_room_department(
     Returns:
         SimpleOK indicating success or failure.
     """
-    with mutation_lock():
-        _assert_expected_version(req.expected_version)
-        ok, err = core.set_room_department(req.building_name, req.room_number, req.department)
-        if ok:
-            bump_version()
+    _assert_expected_version(req.expected_version)
+    ok, err = core.set_room_department(req.building_name, req.room_number, req.department)
+    if ok:
+        bump_version()
         append_audit_event(
             store,
             actor_role=session.role,
@@ -958,11 +642,10 @@ def auto_assign(
         Structured report of assignments, already-assigned people, and failures.
     """
     try:
-        with mutation_lock():
-            _assert_expected_version(req.expected_version)
-            result = core.assign_all_unassigned(department=req.department)
-            if result["assigned_count"] > 0:
-                bump_version()
+        _assert_expected_version(req.expected_version)
+        result = core.assign_all_unassigned(department=req.department)
+        if result["assigned_count"] > 0:
+            bump_version()
         append_audit_event(
             store,
             actor_role=session.role,
@@ -1035,14 +718,6 @@ async def upload_personnel_file(
         result = load_personnel_dataframe(df)
         if result["changed"] or result["room_state_changed"]:
             bump_version()
-        upload_audit_details: dict = {
-            "count": result["count"],
-            "integrity_report": result["integrity_report"],
-        }
-        if result.get("removed_occupants"):
-            upload_audit_details["removed_occupants"] = result["removed_occupants"]["items"]
-        if result.get("auto_reassigned"):
-            upload_audit_details["auto_reassigned"] = result["auto_reassigned"]
         append_audit_event(
             store,
             actor_role=session.role,
@@ -1051,18 +726,16 @@ async def upload_personnel_file(
             entity_type="personnel",
             entity_id=file.filename or "upload",
             message="קובץ כוח אדם נטען",
-            details=upload_audit_details,
+            details={
+                "count": result["count"],
+                "integrity_report": result["integrity_report"],
+            },
         )
-        response: dict = {
+        return {
             "ok": True,
             "count": result["count"],
             "integrity_report": result["integrity_report"],
         }
-        if result.get("removed_occupants"):
-            response["removed_occupants"] = result["removed_occupants"]
-        if result.get("auto_reassigned"):
-            response["auto_reassigned"] = result["auto_reassigned"]
-        return response
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -1071,12 +744,6 @@ async def upload_personnel_file(
 def personnel_sync_status(
     session: AuthSession = Depends(require_admin),
 ) -> dict:
-    """Return the current personnel sync status with configuration flags.
-
-    Returns:
-        Dict combining persisted sync status with configured/paused/interval
-        metadata.
-    """
     status = get_sync_status(store)
     settings = load_settings()
     return {
@@ -1091,12 +758,6 @@ def personnel_sync_status(
 def run_personnel_sync_now(
     session: AuthSession = Depends(require_admin),
 ) -> dict:
-    """Trigger an immediate personnel sync from the configured source URL.
-
-    Returns:
-        Dict with ok status, count, change flag, integrity report, and
-        updated sync status.
-    """
     settings = load_settings()
     url = str(settings.get("personnel_url", "")).strip()
     try:
@@ -1126,43 +787,8 @@ def get_audit_log(
     limit: int = 50,
     session: AuthSession = Depends(require_admin),
 ) -> dict:
-    """Return the most recent audit log entries.
-
-    Args:
-        limit: Maximum number of entries to return (clamped to 1..200).
-
-    Returns:
-        Dict with an ``items`` list of audit event dicts.
-    """
     del session
     return {"items": list_audit_events(store, limit=max(1, min(limit, 200)))}
-
-
-@router.delete("/saved-assignment/{person_id}", response_model=SimpleOK)
-def release_saved_assignment(
-    person_id: str,
-    session: AuthSession = Depends(require_admin),
-) -> SimpleOK:
-    """Remove a saved assignment (release bed reservation)."""
-    existing = store.get_by_id("saved_assignments", person_id)
-    if existing is None:
-        raise HTTPException(status_code=404, detail="לא נמצאה שמירה עבור מזהה זה")
-    store.delete("saved_assignments", person_id)
-    bump_version()
-    append_audit_event(
-        store,
-        actor_role=session.role,
-        actor_department=_actor_department(session),
-        action="release_reservation",
-        entity_type="saved_assignment",
-        entity_id=person_id,
-        message="שמירת מיטה שוחררה ידנית",
-        details={
-            "building_name": existing.get("building_name", ""),
-            "room_number": existing.get("room_number", ""),
-        },
-    )
-    return SimpleOK(ok=True)
 
 
 @router.post("/reset-all", response_model=SimpleOK)
@@ -1170,14 +796,15 @@ def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     """Wipe all rooms and personnel data."""
     store.delete_all("rooms")
     store.delete_all("personnel")
-    store.delete_all("saved_assignments")
     bump_version()
     append_audit_event(
         store,
-        action="reset_all",
         actor_role=session.role,
-        actor_department=session.department,
-        message="כל הנתונים נמחקו",
+        actor_department=_actor_department(session),
+        action="reset_all",
+        entity_type="system",
+        entity_id="all",
+        message="כל הנתונים אופסו",
     )
     logger.info("All rooms and personnel data reset by %s", session.role)
     return SimpleOK(ok=True)
