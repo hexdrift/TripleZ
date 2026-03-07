@@ -71,15 +71,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(GZipMiddleware, minimum_size=500)
+class _SSEAwareGZipMiddleware(GZipMiddleware):
+    """Skip GZip compression for SSE streams to prevent buffering."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").endswith("/stream/rooms"):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+app.add_middleware(_SSEAwareGZipMiddleware, minimum_size=500)
 
 
 def _personnel_sync_interval_seconds() -> int:
-    """Return the personnel sync interval from env or persisted settings.
-
-    Returns:
-        int: Interval in seconds (minimum 15).
-    """
     raw = os.environ.get("TRIPLEZ_PERSONNEL_SYNC_INTERVAL_SECONDS", "").strip()
     if raw:
         try:
@@ -91,7 +95,6 @@ def _personnel_sync_interval_seconds() -> int:
 
 
 async def _personnel_sync_loop() -> None:
-    """Run the background personnel sync loop indefinitely."""
     while True:
         try:
             settings_payload = load_settings()
@@ -131,7 +134,6 @@ async def reconcile_runtime_state_on_startup() -> None:
 
 @app.on_event("shutdown")
 async def stop_background_tasks() -> None:
-    """Cancel the background personnel sync task on shutdown."""
     task = getattr(app.state, "personnel_sync_task", None)
     if task is not None:
         task.cancel()
@@ -164,14 +166,6 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "out"
 
 
 def _static_headers(path: Path) -> dict[str, str]:
-    """Return Cache-Control headers appropriate for the given static file.
-
-    Args:
-        path: Resolved filesystem path to the static asset.
-
-    Returns:
-        dict[str, str]: A single-entry dict with the ``Cache-Control`` header.
-    """
     path_str = path.as_posix()
     if "/_next/static/" in path_str:
         return {"Cache-Control": "public, max-age=31536000, immutable"}
@@ -179,14 +173,6 @@ def _static_headers(path: Path) -> dict[str, str]:
 
 
 def _is_static_asset_path(path: str) -> bool:
-    """Check whether a URL path refers to a static asset (not a client route).
-
-    Args:
-        path: The URL path segment (e.g. ``"_next/static/chunk.js"``).
-
-    Returns:
-        bool: True if the path looks like a static file or known asset prefix.
-    """
     normalized = path.strip("/")
     if not normalized:
         return False

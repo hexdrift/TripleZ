@@ -10,7 +10,7 @@ import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules
 
-scripts_dir = os.path.dirname(os.path.abspath(SPECPATH if 'SPECPATH' in dir() else __file__))
+scripts_dir = os.path.abspath(SPECPATH) if 'SPECPATH' in dir() else os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(scripts_dir, '..'))
 
 main_path = os.path.join(scripts_dir, 'main.py')
@@ -75,7 +75,31 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[runtime_hook_path],
-    excludes=['matplotlib', 'tkinter', 'PyQt5', 'pytest'],
+    excludes=[
+        # GUI / plotting / visualization
+        'matplotlib', 'tkinter', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6',
+        'bokeh', 'plotly', 'altair', 'panel', 'pyviz_comms', 'holoviews',
+        # Scientific / ML (not used by this app)
+        'scipy', 'sklearn', 'scikit-learn', 'skimage', 'scikit-image',
+        'statsmodels', 'sympy', 'astropy', 'patsy', 'pywt',
+        'numba', 'llvmlite',
+        # Data / big-data
+        'pyarrow', 'dask', 'xarray', 'tables', 'h5py', 'fsspec', 'intake',
+        # Jupyter / notebook
+        'IPython', 'ipykernel', 'ipywidgets', 'jupyter', 'jupyterlab',
+        'notebook', 'nbformat', 'nbconvert', 'traitlets',
+        # Other unnecessary
+        'sphinx', 'docutils', 'babel', 'pygments',
+        'PIL', 'Pillow', 'imageio',
+        'lxml', 'lark',
+        'zmq', 'tornado',
+        'pytest', 'py',
+        'botocore', 'boto3',
+        'cryptography', 'bcrypt',
+        'psycopg2', 'MySQLdb',
+        'cloudpickle', 'shelve',
+        'lib2to3', 'setuptools', 'pkg_resources', 'distutils',
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=None,
@@ -97,7 +121,7 @@ exe = EXE(
     name='TripleZ',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
