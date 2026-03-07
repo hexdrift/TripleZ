@@ -13,7 +13,7 @@ import {
 } from "./icons";
 
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,6 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
 
@@ -55,13 +54,13 @@ function formatRoomCell(columnKey: string, value: string) {
   return value;
 }
 
-interface Props { open: boolean; onClose: () => void; initialView?: View; }
+interface Props { open: boolean; onClose: () => void; initialView?: View; defaultBuilding?: string | null; }
 type View = "chooser" | "form" | "csv";
 type Status = "idle" | "loading" | "success" | "error";
 
 const stepTransition = { duration: 0.15, ease: "easeOut" as const };
 
-export function AddRoomModal({ open, onClose, initialView = "chooser", defaultBuilding = null }: Props & { defaultBuilding?: string | null }) {
+export function AddRoomModal({ open, onClose, initialView = "chooser", defaultBuilding = null }: Props) {
   const [view, setView] = useState<View>(initialView);
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -122,6 +121,9 @@ export function AddRoomModal({ open, onClose, initialView = "chooser", defaultBu
               <DialogTitle className="text-xl font-bold text-foreground">
                 {view === "chooser" ? "הוספת חדר" : view === "form" ? "חדר חדש" : "טעינה מקובץ"}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                הוספת חדר חדש למערכת באופן ידני או מקובץ
+              </DialogDescription>
             </DialogHeader>
           </div>
           <Button
@@ -160,7 +162,7 @@ export function AddRoomModal({ open, onClose, initialView = "chooser", defaultBu
             )}
             {view === "csv" && (
               <motion.div key="csv" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={stepTransition}>
-                <RoomCSV settings={settings} status={status} message={message} setStatus={setStatus} setMessage={setMessage} />
+                <RoomCSV settings={settings} status={status} message={message} setStatus={setStatus} setMessage={setMessage} onDone={handleClose} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -327,9 +329,10 @@ function RoomForm({
   );
 }
 
-function RoomCSV({ settings, status, message, setStatus, setMessage }: {
+function RoomCSV({ settings, status, message, setStatus, setMessage, onDone }: {
   settings: AppSettings | null;
   status: Status; message: string; setStatus: (s: Status) => void; setMessage: (m: string) => void;
+  onDone: () => void;
 }) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [fileName, setFileName] = useState("");
@@ -389,6 +392,7 @@ function RoomCSV({ settings, status, message, setStatus, setMessage }: {
           onClick: () => downloadBase64Excel(result.warnings!.excel_base64, "אנשים_לא_מזוהים"),
         });
       }
+      setTimeout(onDone, 700);
     } catch (err) { setStatus("error"); setMessage(err instanceof Error ? err.message : String(err)); toast.error("שגיאה בטעינת חדרים"); }
   }
 
@@ -452,44 +456,12 @@ function RoomCSV({ settings, status, message, setStatus, setMessage }: {
       )}
       <AlertBox status={status} message={message} />
       {rows.length > 0 && (
-        <>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[13px] font-semibold text-foreground">תצוגה מקדימה</p>
-            <Badge variant="secondary">{rows.length} שורות</Badge>
-          </div>
-          <div className="rounded-md border overflow-x-auto mb-4 max-h-[360px] overflow-y-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right px-3 py-2">#</TableHead>
-                  {TEMPLATE_COLUMNS.map((column) => (
-                    <TableHead key={column.key} className="text-right px-3 py-2">
-                      {column.label}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row, idx) => (
-                  <TableRow key={idx}>
-                    <TableCell className="px-3 py-2 text-muted-foreground">{idx + 1}</TableCell>
-                    {TEMPLATE_COLUMNS.map((column) => (
-                      <TableCell key={column.key} className="px-3 py-2">
-                        {formatRoomCell(column.key, row[column.key] ?? "")}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="flex justify-end pt-4 border-t">
-            <Button onClick={handleSubmit} disabled={status === "loading"}>
-              <IconUpload size={15} />
-              {status === "loading" ? "טוען..." : `טען ${rows.length} חדרים`}
-            </Button>
-          </div>
-        </>
+        <div className="flex justify-center pt-4 border-t">
+          <Button onClick={handleSubmit} disabled={status === "loading"} className="w-full max-w-[520px]">
+            <IconUpload size={15} />
+            {status === "loading" ? "טוען..." : `טען ${rows.length} חדרים`}
+          </Button>
+        </div>
       )}
     </>
   );

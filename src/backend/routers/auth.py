@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hmac
+
 from fastapi import APIRouter, Cookie, Depends, Response
 
 from src.backend.auth_session import (
@@ -60,7 +62,7 @@ def login(req: LoginRequest, response: Response) -> LoginResponse:
     settings = load_settings()
     pw = req.password.strip()
 
-    if pw == settings["admin_password"]:
+    if hmac.compare_digest(pw, settings["admin_password"]):
         response.set_cookie(
             key=SESSION_COOKIE_NAME,
             value=create_session_token(role="admin"),
@@ -74,7 +76,7 @@ def login(req: LoginRequest, response: Response) -> LoginResponse:
 
     dept_passwords: dict[str, str] = settings.get("dept_passwords", {})
     for dept, dept_pw in dept_passwords.items():
-        if pw == dept_pw:
+        if hmac.compare_digest(pw, dept_pw):
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,
                 value=create_session_token(role="manager", department=dept),

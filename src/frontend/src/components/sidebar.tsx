@@ -172,7 +172,7 @@ export function Sidebar({ buildings, viewMode, rooms, collapsed, onToggleCollaps
       {/* Desktop sidebar */}
       <aside
         className="fixed bottom-0 right-0 top-0 z-20 hidden border-l border-sidebar-border bg-sidebar/92 backdrop-blur-xl lg:flex"
-        style={{ width: collapsed ? 80 : 300, contain: "layout paint" }}
+        style={{ width: collapsed ? "5rem" : "18.75rem", contain: "layout paint" }}
       >
         <SidebarPane
           authLabel={roleLabelHe(auth)}

@@ -251,7 +251,7 @@ export function AddPersonnelModal({
           <AlertBox status={status} message={message} />
 
           {selectedFile ? (
-            <div className="flex justify-end pt-4 border-t">
+            <div className="flex justify-center pt-4 border-t">
               <Button
                 onClick={handleUpload}
                 disabled={status === "loading"}

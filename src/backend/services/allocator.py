@@ -62,7 +62,23 @@ class RoomAllocatorCore:
         "gender",
     )
 
+    ROOM_COL_HEBREW: dict[str, str] = {
+        "building_name": "שם מבנה",
+        "room_number": "מספר חדר",
+        "number_of_beds": "מספר מיטות",
+        "room_rank": "דרגת חדר",
+        "gender": "מגדר",
+    }
+
     REQUIRED_PERSONNEL_COLS = ("person_id", "full_name", "department", "gender", "rank")
+
+    PERSONNEL_COL_HEBREW: dict[str, str] = {
+        "person_id": "מזהה",
+        "full_name": "שם מלא",
+        "department": "זירה",
+        "gender": "מגדר",
+        "rank": "דרגה",
+    }
 
     def __init__(
         self,
@@ -102,10 +118,12 @@ class RoomAllocatorCore:
         """
         missing = [c for c in self.REQUIRED_ROOM_COLS if c not in rooms_df.columns]
         if missing:
-            raise ValueError(f"חסרות עמודות נדרשות בטבלת החדרים: {missing}")
+            missing_he = [self.ROOM_COL_HEBREW.get(c, c) for c in missing]
+            raise ValueError(f"חסרות עמודות נדרשות בטבלת החדרים: {missing_he}")
         for c in self.room_id_cols:
             if c not in rooms_df.columns:
-                raise ValueError(f"חסרה עמודת מזהה חדר בטבלת החדרים: '{c}'")
+                he = self.ROOM_COL_HEBREW.get(c, c)
+                raise ValueError(f"חסרה עמודת מזהה חדר בטבלת החדרים: '{he}'")
 
         rooms = rooms_df.copy()
         if self.occupant_ids_col not in rooms.columns:
@@ -143,7 +161,8 @@ class RoomAllocatorCore:
         """
         missing = [c for c in self.REQUIRED_PERSONNEL_COLS if c not in personnel_df.columns]
         if missing:
-            raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing}")
+            missing_he = [self.PERSONNEL_COL_HEBREW.get(c, c) for c in missing]
+            raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing_he}")
 
         rows_to_insert: List[dict] = []
         seen_person_ids: set[str] = set()

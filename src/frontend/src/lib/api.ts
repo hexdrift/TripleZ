@@ -305,6 +305,10 @@ export async function importSetupPackage(setupPackage: SetupPackage): Promise<{
   });
 }
 
+export async function resetAll(): Promise<{ ok: boolean }> {
+  return fetchJSON("/admin/reset-all", { method: "POST" });
+}
+
 export async function setRoomDepartment(
   buildingName: string,
   roomNumber: number,

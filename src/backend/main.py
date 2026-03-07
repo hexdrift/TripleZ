@@ -172,11 +172,18 @@ def _is_static_asset_path(path: str) -> bool:
     return bool(Path(normalized).suffix)
 
 if FRONTEND_DIR.is_dir():
+    def _safe_resolve(base: Path, untrusted: str) -> Path | None:
+        """Resolve *untrusted* relative to *base*, returning None on traversal."""
+        resolved = (base / untrusted).resolve()
+        if not resolved.is_relative_to(base.resolve()):
+            return None
+        return resolved
+
     @app.api_route("/media/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     async def serve_media_alias(path: str):
         """Serve exported font/media assets referenced from inlined CSS."""
-        file = FRONTEND_DIR / "_next" / "static" / "media" / path
-        if file.is_file():
+        file = _safe_resolve(FRONTEND_DIR / "_next" / "static" / "media", path)
+        if file and file.is_file():
             return FileResponse(file, headers=_static_headers(file))
         raise HTTPException(status_code=404, detail="לא נמצא")
 
@@ -188,11 +195,11 @@ if FRONTEND_DIR.is_dir():
     @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     async def serve_frontend(path: str):
         """Serve the static Next.js frontend, falling back to index.html for client-side routing."""
-        file = FRONTEND_DIR / path
-        if file.is_file():
+        file = _safe_resolve(FRONTEND_DIR, path)
+        if file and file.is_file():
             return FileResponse(file, headers=_static_headers(file))
-        page_html = FRONTEND_DIR / path / "index.html"
-        if page_html.is_file():
+        page_html = _safe_resolve(FRONTEND_DIR, path + "/index.html") if file else None
+        if page_html and page_html.is_file():
             return FileResponse(page_html, headers={"Cache-Control": "no-cache"})
         if _is_static_asset_path(path):
             raise HTTPException(status_code=404, detail="לא נמצא")

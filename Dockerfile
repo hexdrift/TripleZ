@@ -26,13 +26,21 @@ COPY src/backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY config.py .
-COPY src/ src/
+COPY src/backend/ src/backend/
 COPY --from=frontend-builder /app/frontend/out src/frontend/out
 
-RUN mkdir -p /data
+RUN mkdir -p /data && \
+    addgroup --system triplez && \
+    adduser --system --ingroup triplez triplez && \
+    chown -R triplez:triplez /data
 
 VOLUME ["/data"]
 
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+USER triplez
 
 CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

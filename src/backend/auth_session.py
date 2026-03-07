@@ -66,6 +66,10 @@ def decode_session_token(token: str) -> Optional[AuthSession]:
     except (ValueError, json.JSONDecodeError):
         return None
 
+    iat = payload.get("iat", 0)
+    if isinstance(iat, (int, float)) and time.time() - iat > SESSION_COOKIE_MAX_AGE:
+        return None
+
     role = str(payload.get("role", "")).strip()
     department = payload.get("department")
     if role not in {"admin", "manager"}:

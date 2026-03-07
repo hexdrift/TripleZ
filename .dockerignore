@@ -11,8 +11,10 @@ build/
 .idea/
 .vscode/
 .git/
+.claude/
 .DS_Store
 .playwright-mcp/
+scripts/
 *.spec
 *.db
 *.sqlite3

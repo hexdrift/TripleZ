@@ -276,7 +276,7 @@ function DashboardContent() {
   return (
     <>
       <Card className="page-hero mb-7 overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
-        <CardContent className="p-8">
+        <CardContent className="p-5 sm:p-8">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">
@@ -335,7 +335,7 @@ function DashboardContent() {
         </CardContent>
       </Card>
 
-      <section className="mb-7 grid grid-cols-4 gap-5">
+      <section className="mb-7 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={isManager ? "אנשים משובצים" : "מבנים"}
           value={isManager ? metrics.occupied : buildings.length}
@@ -363,10 +363,8 @@ function DashboardContent() {
       </section>
 
       <section className="mb-7">
-        <div className="mb-4 flex items-end justify-between">
-          <div className="flex items-center gap-3">
-            <ViewToggle viewMode={viewMode} onChange={setViewMode} options={viewOptions} />
-          </div>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <ViewToggle viewMode={viewMode} onChange={setViewMode} options={viewOptions} />
           <Badge variant="secondary" className="bg-background/75">
             {currentCount} {VIEW_COUNT_LABELS[viewMode]}
           </Badge>
@@ -375,7 +373,7 @@ function DashboardContent() {
         {currentCount === 0 ? (
           <EmptyState isManager={isManager} departmentLabel={departmentLabel} />
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {viewMode === "buildings"
               ? buildings.map((building) => <BuildingCard key={building.name} building={building} />)
               : viewMode === "departments"
@@ -469,7 +467,7 @@ function ViewToggle({
     <Tabs value={viewMode} onValueChange={(v) => onChange(v as ViewMode)}>
       <TabsList className="bg-background/70">
         {options.map(({ key, label }) => (
-          <TabsTrigger key={key} value={key} className="min-w-[110px]">
+          <TabsTrigger key={key} value={key} className="min-w-0 px-3 sm:min-w-[110px]">
             {label}
           </TabsTrigger>
         ))}
@@ -487,7 +485,7 @@ function DashboardSkeleton() {
           <div className="skeleton h-4 w-80 rounded-lg" />
         </CardContent>
       </Card>
-      <div className="mb-7 grid grid-cols-4 gap-5">
+      <div className="mb-7 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="p-5">
@@ -508,7 +506,7 @@ function DashboardSkeleton() {
               </div>
               <div className="skeleton h-10 w-44 rounded-lg" />
             </div>
-            <div className="mb-4 grid grid-cols-3 gap-3">
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="skeleton h-20 rounded-xl" />
               ))}
@@ -517,7 +515,7 @@ function DashboardSkeleton() {
           </CardContent>
         </Card>
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="col-span-4 overflow-hidden rounded-2xl">
+          <Card key={i} className="col-span-12 sm:col-span-6 lg:col-span-4 overflow-hidden rounded-2xl">
             <CardContent className="p-5">
               <div className="skeleton mb-3 h-5 w-36 rounded-lg" />
               <div className="skeleton mb-4 h-4 w-44 rounded-lg" />
@@ -534,7 +532,7 @@ function DashboardSkeleton() {
               </div>
               <div className="skeleton h-9 w-24 rounded-lg" />
             </div>
-            <div className="mb-4 grid grid-cols-3 gap-3">
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="skeleton h-20 rounded-xl" />
               ))}
@@ -543,7 +541,7 @@ function DashboardSkeleton() {
           </CardContent>
         </Card>
       </div>
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, i) => (
           <Card key={i}>
             <CardContent className="p-5">
@@ -578,7 +576,7 @@ function AnalyticsLoadingBlock() {
         </CardContent>
       </Card>
       {Array.from({ length: 4 }).map((_, i) => (
-        <Card key={i} className={i === 3 ? "col-span-12 overflow-hidden rounded-2xl" : "col-span-4 overflow-hidden rounded-2xl"}>
+        <Card key={i} className={i === 3 ? "col-span-12 overflow-hidden rounded-2xl" : "col-span-12 sm:col-span-6 lg:col-span-4 overflow-hidden rounded-2xl"}>
           <CardContent className="p-5">
             <div className="skeleton mb-3 h-5 w-36 rounded-lg" />
             <div className="skeleton mb-4 h-4 w-44 rounded-lg" />

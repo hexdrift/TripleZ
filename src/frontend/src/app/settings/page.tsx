@@ -10,12 +10,14 @@ import {
   getSetupPackage,
   IntegrityReport,
   importSetupPackage,
+  resetAll,
   runPersonnelSyncNow,
   SetupPackage,
   updateSettings,
 } from "@/lib/api";
 import { downloadBlob } from "@/lib/export";
 import {
+  IconAlertCircle,
   IconArrowDown,
   IconArrowUp,
   IconCheck,
@@ -35,6 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
 import { cn } from "@/lib/utils";
 
 const fadeUp = {
@@ -60,6 +63,8 @@ function SettingsContent() {
   const [loadingPersonnel, setLoadingPersonnel] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exportingSetup, setExportingSetup] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const settingsImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -203,6 +208,21 @@ function SettingsContent() {
       toast.error(message);
     } finally {
       setLoadingPersonnel(false);
+    }
+  }
+
+  async function handleResetAll() {
+    setResetting(true);
+    setShowResetConfirm(false);
+    try {
+      await resetAll();
+      await refreshPersonnel(true);
+      toast.success("כל הנתונים אופסו בהצלחה");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה באיפוס";
+      toast.error(message);
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -427,6 +447,42 @@ function SettingsContent() {
 
         </Tabs>
       </motion.div>
+
+      <motion.div variants={fadeUp} transition={{ duration: 0.18 }}>
+        <Card className="overflow-hidden border-destructive/30 bg-gradient-to-br from-card via-card to-background/80">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-[15px] font-semibold text-destructive flex items-center gap-2">
+                  <IconAlertCircle size={16} />
+                  איפוס נתונים
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  מחיקת כל החדרים וכוח האדם מהמערכת. פעולה זו אינה הפיכה.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={resetting}
+              >
+                <IconTrash size={14} />
+                {resetting ? "מאפס..." : "איפוס הכל"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <ConfirmationDialog
+        open={showResetConfirm}
+        onOpenChange={setShowResetConfirm}
+        title="איפוס כל הנתונים"
+        description="פעולה זו תמחק את כל החדרים ואת כל כוח האדם מהמערכת. לא ניתן לבטל פעולה זו."
+        confirmLabel="אפס הכל"
+        onConfirm={handleResetAll}
+      />
     </motion.div>
   );
 }

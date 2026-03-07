@@ -149,7 +149,7 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
         setError(res.error || "סיסמה שגויה");
       }
     } catch {
-      setError("שגיאת חיבור לשרת (Frontend: localhost:3000, API: localhost:8000)");
+      setError("שגיאת חיבור לשרת. ודא שהשרת פעיל ונגיש.");
     } finally {
       setLoading(false);
     }

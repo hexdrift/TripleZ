@@ -131,7 +131,7 @@ export function DashboardAnalytics({
       />
 
       <div className="grid grid-cols-12 items-stretch gap-4 auto-rows-fr">
-        <div className="col-span-4 flex min-w-0">
+        <div className="col-span-12 flex min-w-0 sm:col-span-6 lg:col-span-4">
           <DistributionCard
             title={distributionTitle}
             description={distributionDescription}
@@ -142,11 +142,11 @@ export function DashboardAnalytics({
           />
         </div>
 
-        <div className="col-span-4 flex min-w-0">
+        <div className="col-span-12 flex min-w-0 sm:col-span-6 lg:col-span-4">
           <RoomStatusCard roomStatus={roomStatus} ready={chartsReady} className="h-full w-full" />
         </div>
 
-        <div className="col-span-4 flex min-w-0">
+        <div className="col-span-12 flex min-w-0 sm:col-span-12 lg:col-span-4">
           <RankPressureCard items={rankItems} ready={chartsReady} className="h-full w-full" />
         </div>
       </div>
@@ -219,7 +219,7 @@ function PrimaryCapacityCard({
       </CardHeader>
 
       <CardContent className="pt-5">
-        <div className="mb-5 grid grid-cols-3 gap-3">
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <InlineMetric label="מיטות תפוסות" value={totalAssigned} helper={totalBeds > 0 ? `${Math.round((totalAssigned / totalBeds) * 100)}% מהקיבולת` : "אין קיבולת"} />
           <InlineMetric label="מיטות פנויות" value={Math.max(totalBeds - totalAssigned, 0)} helper="זמינות לשיבוץ מיידי" />
           <InlineMetric label="מבנים פעילים" value={chartData.length} helper="מוצגים לפי עומס קיים" />
@@ -288,7 +288,7 @@ function PrimaryCapacityCard({
           }
         </ChartSurface>
 
-        <div className="mt-5 grid grid-cols-3 gap-3 border-t border-border/70 pt-4 pb-2">
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3 border-t border-border/70 pt-4 pb-2">
           <FooterHighlight
             label="העומס הגבוה ביותר"
             title={topOccupied?.label ?? "—"}
@@ -458,7 +458,7 @@ function RoomStatusCard({ roomStatus, ready, className }: { roomStatus: RoomStat
             )}
         </ChartSurface>
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {items.map((item) => {
             const percentage = total > 0 ? Math.round((item.value / total) * 100) : 0;
             return (
@@ -584,7 +584,7 @@ function AssignmentGapCard({
       </CardHeader>
 
       <CardContent className="pt-5">
-        <div className="mb-5 grid grid-cols-3 gap-3">
+        <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <InlineMetric label="שובצו" value={assignedPeople} helper={totalPeople > 0 ? `${overallRate}% מכלל הרשומות` : "אין רשומות"} />
           <InlineMetric label="ממתינים לשיבוץ" value={waitingTotal} helper={waitingTotal > 0 ? "דורש טיפול תפעולי" : "אין עומס פתוח"} />
           <InlineMetric
@@ -609,7 +609,7 @@ function AssignmentGapCard({
             )}
         </ChartSurface>
 
-        <div className="mt-4 grid grid-cols-3 gap-3">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {items.slice(0, 3).map((item) => (
             <div key={item.label} className="rounded-xl border border-border/70 bg-muted/[0.18] px-4 py-3">
               <div className="mb-2 flex items-center justify-between gap-3">

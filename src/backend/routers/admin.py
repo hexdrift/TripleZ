@@ -40,6 +40,8 @@ from src.backend.settings import load_settings, validate_personnel_source_url
 
 logger = logging.getLogger(__name__)
 
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
+
 PERSONNEL_HEADER_ALIASES = {
     "person_id": "person_id",
     "full_name": "full_name",
@@ -51,6 +53,14 @@ PERSONNEL_HEADER_ALIASES = {
     "זירה": "department",
     "מגדר": "gender",
     "דרגה": "rank",
+}
+
+PERSONNEL_COL_HEBREW: dict[str, str] = {
+    "person_id": "מזהה",
+    "full_name": "שם מלא",
+    "department": "זירה",
+    "gender": "מגדר",
+    "rank": "דרגה",
 }
 
 ROOM_HEADER_ALIASES = {
@@ -71,6 +81,16 @@ ROOM_HEADER_ALIASES = {
     "זירה ייעודית (אופציונלי)": "designated_department",
 }
 
+ROOM_COL_HEBREW: dict[str, str] = {
+    "building_name": "שם מבנה",
+    "room_number": "מספר חדר",
+    "number_of_beds": "מספר מיטות",
+    "room_rank": "דרגת חדר",
+    "gender": "מגדר",
+    "occupant_ids": "מזהי דיירים",
+    "designated_department": "זירה ייעודית",
+}
+
 
 def _sanitize_excel_cell(value: object) -> object:
     """Neutralize spreadsheet formula prefixes in exported string cells."""
@@ -84,7 +104,7 @@ def _sanitize_excel_cell(value: object) -> object:
 
 def _sanitize_excel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Return a copy safe for spreadsheet export."""
-    return df.applymap(_sanitize_excel_cell)
+    return df.map(_sanitize_excel_cell)
 
 
 def _normalize_personnel_dataframe(df: pd.DataFrame) -> pd.DataFrame:
@@ -113,7 +133,8 @@ def _normalize_personnel_records(df: pd.DataFrame) -> list[dict]:
     required_columns = list(core.REQUIRED_PERSONNEL_COLS)
     missing = [column for column in required_columns if column not in normalized.columns]
     if missing:
-        raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing}")
+        missing_he = [PERSONNEL_COL_HEBREW.get(c, c) for c in missing]
+        raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing_he}")
 
     records: list[dict] = []
     seen_person_ids: set[str] = set()
@@ -545,6 +566,8 @@ async def upload_rooms_file(
     """
     try:
         contents = await file.read()
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="הקובץ גדול מדי. גודל מרבי: 10MB")
         filename = (file.filename or "").lower()
         if filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(contents))
@@ -685,6 +708,8 @@ async def upload_personnel_file(
     """
     try:
         contents = await file.read()
+        if len(contents) > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=413, detail="הקובץ גדול מדי. גודל מרבי: 10MB")
         filename = (file.filename or "").lower()
         if filename.endswith(".csv"):
             df = pd.read_csv(io.BytesIO(contents))
@@ -764,3 +789,19 @@ def get_audit_log(
 ) -> dict:
     del session
     return {"items": list_audit_events(store, limit=max(1, min(limit, 200)))}
+
+
+@router.post("/reset-all", response_model=SimpleOK)
+def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
+    """Wipe all rooms and personnel data."""
+    store.delete_all("rooms")
+    store.delete_all("personnel")
+    bump_version()
+    append_audit_event(store, {
+        "action": "reset_all",
+        "actor_role": session.role,
+        "actor_department": session.department,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    logger.info("All rooms and personnel data reset by %s", session.role)
+    return SimpleOK(ok=True)

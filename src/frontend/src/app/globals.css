@@ -796,3 +796,22 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
     scroll-behavior: auto !important;
   }
 }
+
+/* Sidebar margin — only on desktop (lg: 1024px+) */
+@media (min-width: 1024px) {
+  main[style*="--sidebar-w"] {
+    margin-right: var(--sidebar-w, 300px);
+  }
+}
+
+/* Large desktops (2K+): scale UI proportionally via root font-size.
+   All rem-based sizing (text, spacing, max-widths) scales automatically. */
+@media (min-width: 2560px) {
+  :root { font-size: 125%; }
+}
+@media (min-width: 3200px) {
+  :root { font-size: 150%; }
+}
+@media (min-width: 3840px) {
+  :root { font-size: 175%; }
+}

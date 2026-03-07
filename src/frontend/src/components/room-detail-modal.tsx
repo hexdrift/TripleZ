@@ -25,6 +25,8 @@ import {
   IconChevronRight,
   IconBed,
   IconBuilding,
+  IconCrown,
+  IconGender,
 } from "./icons";
 
 import {
@@ -73,9 +75,8 @@ const slideTrans = { duration: 0.18, ease: [0.25, 0.1, 0.25, 1] as const };
 function roomCompatibleForPerson(
   person: Pick<Personnel, "gender" | "rank"> | null,
   room: Pick<Room, "gender" | "room_rank"> | null,
-  ranksHighToLow: string[],
+  _rankOrder?: string[],
 ): boolean {
-  void ranksHighToLow;
   if (!person || !room) return false;
   if (String(person.gender) !== String(room.gender)) return false;
   return true;
@@ -485,598 +486,102 @@ function RoomMetadataEditor({ room }: { room: Room }) {
   const effectiveGenders = Array.from(new Set([...(availableGenders.length > 0 ? availableGenders : [room.gender]), room.gender]));
 
   return (
-    <div className="space-y-4">
-      <Card className="rounded-2xl border border-border/70 bg-background/80 p-4 sm:p-5">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="room-beds" className="text-[12px] font-semibold text-muted-foreground">
-              מספר מיטות
-            </Label>
-            <Input
-              id="room-beds"
-              type="number"
-              min={Math.max(room.occupant_count, 1)}
-              value={bedCount}
-              onChange={(e) => setBedCount(e.target.value)}
-              dir="ltr"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-muted-foreground">
-              דרגת חדר
-            </Label>
-            <Select value={rank} onValueChange={setRank}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {effectiveRanks.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {rankHe(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-muted-foreground">
-              מגדר
-            </Label>
-            <Select value={gender} onValueChange={setGender}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {effectiveGenders.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {genderHe(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[12px] font-semibold text-muted-foreground">
-              זירה מועדפת
-            </Label>
-            <Select value={department} onValueChange={setDepartment}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__auto__">ללא זירה ידנית</SelectItem>
-                {effectiveDepts.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {deptHe(value)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl border border-border/70 bg-muted/20 p-4">
-        {error ? (
-          <p className="mb-3 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {error}
-          </p>
-        ) : null}
-        {success ? (
-          <p className="mb-3 rounded-md bg-[var(--success-dim)] px-3 py-2 text-xs text-[var(--success)]">
-            {success}
-          </p>
-        ) : null}
-
-        <Button
-          type="button"
-          onClick={handleSave}
-          disabled={loading}
-          className="h-10 w-full rounded-xl"
-        >
-          {loading ? "שומר..." : "שמור מטא־דאטה"}
-        </Button>
-      </Card>
-    </div>
-  );
-}
-
-function ClickableBedLegacy({
-  index,
-  occupied,
-  selected,
-  deptColor,
-  label,
-  onClick,
-}: {
-  index: number;
-  occupied: boolean;
-  selected: boolean;
-  deptColor: typeof DEFAULT_DEPT_COLOR;
-  label?: string;
-  onClick: () => void;
-}) {
-  const fill = occupied ? deptColor.bg : "var(--surface-1)";
-  const stroke = occupied ? deptColor.strong : "var(--border)";
-  const hoverBg = occupied ? deptColor.bg : "var(--color-muted)";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "relative flex min-w-[52px] max-w-[80px] flex-1 cursor-pointer select-none flex-col items-center rounded-lg p-1 transform-gpu transition-[transform,background-color,box-shadow,ring-color,opacity] duration-75 ease-out active:scale-[0.93] motion-reduce:transform-none motion-reduce:transition-none",
-        selected && "ring-2 ring-offset-1",
-      )}
-      style={{
-        backgroundColor: selected
-          ? occupied
-            ? deptColor.bg
-            : "var(--color-muted)"
-          : undefined,
-        ...(selected
-          ? ({
-              "--tw-ring-color": occupied ? deptColor.strong : "var(--ring)",
-            } as React.CSSProperties)
-          : {}),
-      }}
-      onMouseEnter={(e) => {
-        if (!selected) e.currentTarget.style.backgroundColor = hoverBg;
-      }}
-      onMouseLeave={(e) => {
-        if (!selected) e.currentTarget.style.backgroundColor = "";
-      }}
-      title={
-        occupied ? `מיטה ${index + 1} - תפוסה` : `מיטה ${index + 1} - פנויה`
-      }
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 200 200"
-        className={cn("h-auto w-full", occupied ? "opacity-100" : "opacity-40")}
-      >
-        <g
-          fill={fill}
-          stroke={stroke}
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="42" y="20" width="116" height="24" rx="6" />
-          <rect x="50" y="36" width="100" height="144" rx="8" />
-          <rect x="65" y="48" width="70" height="32" rx="10" />
-          <path d="M 46 95 L 154 95 L 154 172 C 154 179.7 147.7 186 140 186 L 60 186 C 52.3 186 46 179.7 46 172 Z" />
-          <rect x="46" y="85" width="108" height="20" rx="6" />
-        </g>
-        <g
-          fill="none"
-          stroke={stroke}
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M 78 64 Q 100 68 122 64" />
-          <path d="M 75 120 Q 85 145 75 170" />
-          <path d="M 125 120 Q 115 145 125 170" />
-        </g>
-      </svg>
-      <span
-        className={cn(
-          "mt-0.5 max-w-full truncate px-0.5 text-[9px] font-bold",
-          !occupied && "text-muted-foreground",
-        )}
-        style={occupied ? { color: deptColor.strong } : undefined}
-      >
-        {label || `מיטה ${index + 1}`}
-      </span>
-    </button>
-  );
-}
-
-type OccupantActionLegacy = null | "swap" | "move";
-
-function OccupantDetailLegacy({
-  personId,
-  name,
-  bedIndex,
-}: {
-  personId: string;
-  name: string;
-  bedIndex: number;
-}) {
-  const { personnel, rooms, auth, dataVersion } = useAppData();
-  const [loading, setLoading] = useState(false);
-  const [action, setAction] = useState<OccupantActionLegacy>(null);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
-  const [rankOrder, setRankOrder] = useState<string[]>([]);
-
-  const person = personnel.find((p) => p.person_id === personId);
-  const effectiveRankOrder = useMemo(
-    () =>
-      rankOrder.length > 0
-        ? rankOrder
-        : Array.from(new Set(personnel.map((entry) => String(entry.rank || "").trim()).filter(Boolean))),
-    [personnel, rankOrder],
-  );
-
-  useEffect(() => {
-    let active = true;
-    getAuthContext()
-      .then((context) => {
-        if (!active) return;
-        setRankOrder((context.ranks_high_to_low ?? []).map((value) => String(value || "").trim()).filter(Boolean));
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function handleUnassign() {
-    setLoading(true);
-    try {
-      await unassignPerson(personId, dataVersion);
-      toast.success(`${displayName} הוסר מהחדר`);
-    } catch (err) {
-      toast.error("שגיאה בהסרה מהחדר");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const displayName = person?.full_name || name || personId;
-
-  function toggleAction(nextAction: OccupantActionLegacy) {
-    setError("");
-    setSuccess("");
-    setAction((current) => (current === nextAction ? null : nextAction));
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Person info card */}
-      <div className="rounded-md border bg-muted/50 p-4">
-        <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
-            {displayName.charAt(0)}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-foreground">
-              {displayName}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              מיטה {bedIndex}
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <InfoRow label="מזהה" value={personId} />
-          {person ? (
-            <>
-              <InfoRow label="זירה" value={deptHe(person.department)} />
-              <InfoRow label="דרגה" value={rankHe(person.rank)} />
-              <InfoRow label="מגדר" value={genderHe(person.gender)} />
-            </>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className={cn("grid gap-2", auth.role === "admin" ? "grid-cols-3" : "grid-cols-2")}>
-        <ActionButtonLegacy
-          active={action === "swap"}
-          icon={<IconSwap size={14} />}
-          label="החלף"
-          onClick={() => toggleAction("swap")}
-        />
-        <ActionButtonLegacy
-          active={action === "move"}
-          icon={<IconMove size={14} />}
-          label="העבר"
-          onClick={() => toggleAction("move")}
-        />
-        {auth.role === "admin" ? (
-          <ActionButtonLegacy
-            active={false}
-            icon={<IconUserMinus size={14} />}
-            label="הסר"
-            variant="destructive"
-            onClick={() => setConfirmRemoveOpen(true)}
-            disabled={loading}
-          />
-        ) : null}
-      </div>
-
+    <div className="space-y-5">
       {error ? (
-        <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+        <p className="rounded-lg bg-destructive/10 border border-destructive/30 px-4 py-3 text-[13px] text-destructive">
           {error}
         </p>
       ) : null}
       {success ? (
-        <p className="rounded-md bg-[var(--success-dim)] px-2 py-1.5 text-xs text-[var(--success)]">
+        <p className="rounded-lg bg-[var(--success-dim)] border border-[var(--success)]/30 px-4 py-3 text-[13px] text-[var(--success)]">
           {success}
         </p>
       ) : null}
 
-      <AnimatePresence mode="wait">
-        {action === "swap" ? (
-          <motion.div
-            key="swap"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <InlineSwapLegacy
-              personId={personId}
-              personnel={personnel}
-              rooms={rooms}
-              onDone={(msg) => {
-                setSuccess(msg);
-                setAction(null);
-              }}
-              onError={setError}
-            />
-          </motion.div>
-        ) : action === "move" ? (
-          <motion.div
-            key="move"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="overflow-hidden"
-          >
-            <InlineMove
-              personId={personId}
-              rooms={rooms}
-              rankOrder={effectiveRankOrder}
-              onDone={(msg) => {
-                setSuccess(msg);
-                setAction(null);
-              }}
-              onError={setError}
-            />
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      <ConfirmationDialog
-        open={confirmRemoveOpen}
-        title="להסיר מהחדר?"
-        description={`${displayName} יוסר מהחדר הנוכחי.`}
-        confirmLabel="הסר"
-        onOpenChange={setConfirmRemoveOpen}
-        onConfirm={() => {
-          setConfirmRemoveOpen(false);
-          handleUnassign();
-        }}
-      />
-    </div>
-  );
-}
-
-function ActionButtonLegacy({
-  active,
-  icon,
-  label,
-  variant,
-  onClick,
-  disabled,
-}: {
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  variant?: "destructive";
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  const isDestructive = variant === "destructive";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border px-3 py-2.5 text-[12px] font-medium transform-gpu transition-[transform,background-color,color,border-color,box-shadow] duration-75 ease-out active:scale-[0.95] disabled:pointer-events-none disabled:opacity-50",
-        isDestructive
-          ? "border-destructive/30 text-destructive hover:bg-destructive/10 active:bg-destructive/15"
-          : active
-            ? "border-foreground bg-foreground text-background shadow-sm"
-            : "border-border/70 bg-background text-foreground hover:border-foreground/40 hover:bg-muted/50 active:bg-muted/70",
-      )}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
-function InlineSwapLegacy({
-  personId,
-  personnel,
-  rooms,
-  onDone,
-  onError,
-}: {
-  personId: string;
-  personnel: Personnel[];
-  rooms: Room[];
-  onDone: (msg: string) => void;
-  onError: (msg: string) => void;
-}) {
-  const { dataVersion } = useAppData();
-  const [query, setQuery] = useState("");
-  const [showList, setShowList] = useState(false);
-  const [targetPerson, setTargetPerson] = useState<Personnel | null>(null);
-  const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const assignedIds = useMemo(
-    () => new Set(rooms.flatMap((r) => r.occupant_ids)),
-    [rooms],
-  );
-  const roomMap = useMemo(() => {
-    const map = new Map<string, Room>();
-    for (const room of rooms)
-      for (const id of room.occupant_ids) map.set(id, room);
-    return map;
-  }, [rooms]);
-  const currentRoom = roomMap.get(personId) || null;
-  const currentRoomKey = currentRoom
-    ? `${currentRoom.building_name}-${currentRoom.room_number}`
-    : "";
-
-  const filtered = useMemo(() => {
-    const list = personnel.filter((p) => {
-      if (p.person_id === personId || !assignedIds.has(p.person_id))
-        return false;
-      const room = roomMap.get(p.person_id);
-      if (!room) return false;
-      return `${room.building_name}-${room.room_number}` !== currentRoomKey;
-    });
-    if (!query.trim()) return list;
-    const q = query.toLowerCase();
-    return list.filter(
-      (p) =>
-        p.person_id.toLowerCase().includes(q) ||
-        p.full_name.toLowerCase().includes(q),
-    );
-  }, [assignedIds, currentRoomKey, personId, personnel, query, roomMap]);
-
-  useEffect(() => {
-    function onMouseDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (
-        listRef.current &&
-        !listRef.current.contains(target) &&
-        inputRef.current &&
-        !inputRef.current.contains(target)
-      ) {
-        setShowList(false);
-      }
-    }
-    document.addEventListener("mousedown", onMouseDown);
-    return () => document.removeEventListener("mousedown", onMouseDown);
-  }, []);
-
-  async function handleSwap() {
-    if (!targetPerson) return;
-    setLoading(true);
-    onError("");
-    try {
-      const res = await swapPeople(personId, targetPerson.person_id, dataVersion);
-      if (res.ok) {
-        toast.success(`הוחלף עם ${targetPerson.full_name} בהצלחה`);
-        onDone(`הוחלף עם ${targetPerson.full_name} בהצלחה`);
-      } else {
-        toast.error(res.detail || "ההחלפה נכשלה");
-        onError(res.detail || "ההחלפה נכשלה");
-      }
-    } catch {
-      toast.error("שגיאת חיבור");
-      onError("שגיאת חיבור");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2 rounded-md border bg-muted/50 p-3">
-      <p className="text-xs font-semibold text-muted-foreground">החלפה עם:</p>
-      {targetPerson ? (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[13px] font-semibold text-foreground">
-              {targetPerson.full_name}
-            </span>
-            {(() => {
-              const r = roomMap.get(targetPerson.person_id);
-              return r ? (
-                <Badge variant="secondary" className="shrink-0 text-[10px]">
-                  חדר {r.room_number}
-                </Badge>
-              ) : null;
-            })()}
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setTargetPerson(null)}
-            >
-              <IconX size={12} />
-            </Button>
-            <Button size="sm" onClick={handleSwap} disabled={loading}>
-              <IconSwap size={12} />
-              {loading ? "מחליף..." : "החלף"}
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-1.5">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="room-beds" className="text-xs font-semibold text-muted-foreground gap-1.5">
+            <span className="text-muted-foreground/70"><IconBed size={15} /></span>
+            מספר מיטות
+          </Label>
           <Input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setShowList(true);
-            }}
-            onFocus={() => setShowList(true)}
-            placeholder="חפש אדם משובץ להחלפה"
-            autoComplete="off"
+            id="room-beds"
+            type="number"
+            min={Math.max(room.occupant_count, 1)}
+            value={bedCount}
+            onChange={(e) => setBedCount(e.target.value)}
+            dir="ltr"
           />
-          {showList ? (
-            filtered.length > 0 ? (
-              <div className="overflow-hidden rounded-xl border border-border/70 bg-popover/95 shadow-lg backdrop-blur-sm">
-                <div className="flex items-center justify-between border-b border-border/60 px-3 py-2 text-[11px]">
-                  <span className="font-semibold text-foreground">אנשים משובצים זמינים להחלפה</span>
-                  <span className="text-muted-foreground">{filtered.length}</span>
-                </div>
-                <div
-                  ref={listRef}
-                  className="scrollbar-subtle max-h-[168px] overflow-y-auto p-1.5"
-                >
-                  {filtered.slice(0, 15).map((p) => {
-                    const r = roomMap.get(p.person_id);
-                    return (
-                      <button
-                        key={p.person_id}
-                        type="button"
-                        onMouseDown={() => {
-                          setTargetPerson(p);
-                          setShowList(false);
-                          setQuery("");
-                        }}
-                        className="flex w-full cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-right text-[12px] hover:bg-accent"
-                      >
-                        <span className="truncate">{p.full_name}</span>
-                        {r ? (
-                          <span className="shrink-0 text-muted-foreground">
-                            חדר {r.room_number}
-                          </span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : query.trim() ? (
-              <div className="rounded-md border bg-popover px-3 py-2 text-[11px] text-muted-foreground">
-                אין אנשים תואמים לחיפוש
-              </div>
-            ) : null
-          ) : null}
         </div>
-      )}
+
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground gap-1.5">
+            <span className="text-muted-foreground/70"><IconCrown size={15} /></span>
+            דרגת חדר
+          </Label>
+          <Select value={rank} onValueChange={setRank}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {effectiveRanks.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {rankHe(value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground gap-1.5">
+            <span className="text-muted-foreground/70"><IconGender size={15} /></span>
+            מגדר
+          </Label>
+          <Select value={gender} onValueChange={setGender}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {effectiveGenders.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {genderHe(value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground gap-1.5">
+            <span className="text-muted-foreground/70"><IconBuilding size={15} /></span>
+            זירה מועדפת
+          </Label>
+          <Select value={department} onValueChange={setDepartment}>
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__auto__">ללא זירה ידנית</SelectItem>
+              {effectiveDepts.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {deptHe(value)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex justify-center border-t pt-5">
+        <Button
+          onClick={handleSave}
+          disabled={loading}
+          className="w-full max-w-[520px]"
+        >
+          {loading ? "שומר..." : "שמור מטא־דאטה"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1220,6 +725,7 @@ function OccupantDetail({
       await unassignPerson(personId, dataVersion);
       toast.success(`${displayName} הוסר מהחדר`);
     } catch (err) {
+      setError("שגיאה בהסרה מהחדר");
       toast.error("שגיאה בהסרה מהחדר");
     } finally {
       setLoading(false);

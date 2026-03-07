@@ -117,7 +117,7 @@ export function splitCSVLine(line: string): string[] {
 export function parseCSV(text: string): Record<string, string>[] {
   const lines = text.split(/\r?\n/).filter((l) => l.trim());
   if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => normalizeRoomHeader(h));
+  const headers = splitCSVLine(lines[0]).map((h) => normalizeRoomHeader(h));
   return lines.slice(1).map((line) => {
     const values = splitCSVLine(line);
     const row: Record<string, string> = {};
@@ -156,7 +156,7 @@ export function parseOccupantIds(value: string): string[] {
 export function toRoomPayload(row: Record<string, string>): Record<string, unknown> {
   const designatedDepartment = normalizeDepartmentValue(row.designated_department ?? "");
   return {
-    building_name: normalizeBuildingValue(row.building_name ?? ""), room_number: row.room_number ?? "",
+    building_name: normalizeBuildingValue(row.building_name ?? ""), room_number: Number(row.room_number) || 0,
     number_of_beds: Number(row.number_of_beds) || 0, room_rank: normalizeRankValue(row.room_rank ?? ""),
     gender: normalizeGenderValue(row.gender ?? ""),
     occupant_ids: parseOccupantIds(row.occupant_ids ?? ""),

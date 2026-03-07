@@ -47,7 +47,6 @@ core = RoomAllocatorCore(store, rank_policy=rank_policy)
 def reload_runtime_settings() -> None:
     """Refresh runtime policy objects after settings changes."""
     ranks = get_ranks_high_to_low()
-    rank_policy.ranks_high_to_low = list(ranks)
     core.rank_policy = RankPolicy(ranks)
 
 

@@ -68,11 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const dataVersionRef = useRef(0);
   const connectionStateRef = useRef<ConnectionState>("connecting");
 
-  const filteredRooms = useMemo(() => rooms, [rooms]);
-
-  const buildings = useMemo(() => buildingSummaries(filteredRooms), [filteredRooms]);
-
-  const personnel = useMemo(() => allPersonnel, [allPersonnel]);
+  const buildings = useMemo(() => buildingSummaries(rooms), [rooms]);
 
   const refreshPersonnel = useCallback(async (force = false) => {
     if (!force && connectionStateRef.current !== "connected") {
@@ -105,8 +101,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     connectionStateRef.current = connectionState;
   }, [connectionState]);
   const contextValue = useMemo(
-    () => ({ rooms: filteredRooms, buildings, personnel, dataVersion, loading, error, connectionState, lastUpdatedAt, auth, viewMode, setViewMode, refreshPersonnel }),
-    [filteredRooms, buildings, personnel, dataVersion, loading, error, connectionState, lastUpdatedAt, auth, viewMode, refreshPersonnel],
+    () => ({ rooms, buildings, personnel: allPersonnel, dataVersion, loading, error, connectionState, lastUpdatedAt, auth, viewMode, setViewMode, refreshPersonnel }),
+    [rooms, buildings, allPersonnel, dataVersion, loading, error, connectionState, lastUpdatedAt, auth, viewMode, refreshPersonnel],
   );
 
   useEffect(() => {
@@ -123,7 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
     const base = getApiBaseUrl();
-    const connectionHint = `לא ניתן להתחבר לשרת ה-API (${base}). ודא שה-Frontend רץ על http://localhost:3000 ושה-Backend רץ על http://localhost:8000.`;
+    const connectionHint = `לא ניתן להתחבר לשרת ה-API (${base}).`;
     setConnectionState("connecting");
 
     const es = new EventSource(`${base}/stream/rooms`, { withCredentials: true });
@@ -215,16 +211,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Sidebar
             buildings={buildings}
             viewMode={viewMode}
-            rooms={filteredRooms}
+            rooms={rooms}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
           />
         </Suspense>
         <main
-          className="relative min-h-screen px-10 py-10"
-          style={{ marginRight: sidebarCollapsed ? 80 : 300 }}
+          className="relative min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 2xl:px-14"
+          style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "5rem" : "18.75rem" }}
         >
-          <div className="mx-auto w-full max-w-[1560px]">{children}</div>
+          <div className="mx-auto w-full max-w-[112rem]">{children}</div>
         </main>
       </div>
     </Ctx.Provider>

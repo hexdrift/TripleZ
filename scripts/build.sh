@@ -10,7 +10,7 @@ echo "TripleZ - Build Script"
 echo "=========================================="
 
 echo "[1/4] Installing Python dependencies..."
-pip install -r src/backend/requirements.txt
+pip install -r src/backend/requirements-build.txt
 
 echo "[2/4] Installing frontend dependencies..."
 cd src/frontend && npm ci && cd ../..
