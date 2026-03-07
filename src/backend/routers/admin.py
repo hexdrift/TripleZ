@@ -796,6 +796,7 @@ def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     """Wipe all rooms and personnel data."""
     store.delete_all("rooms")
     store.delete_all("personnel")
+    store.delete_all("saved_assignments")
     bump_version()
     append_audit_event(
         store,
