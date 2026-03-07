@@ -12,6 +12,7 @@ import {
   IconBuilding,
   IconChevronLeft,
   IconChevronRight,
+  IconClipboardList,
   IconCrown,
   IconGender,
   IconLayoutDashboard,
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/", label: "לוח בקרה", icon: IconLayoutDashboard, adminOnly: false },
   { href: "/personnel", label: "כוח אדם", icon: IconUsers, adminOnly: false },
   { href: "/rooms", label: "חדרים", icon: IconBed, adminOnly: true },
+  { href: "/audit", label: "יומן פעולות", icon: IconClipboardList, adminOnly: true },
   { href: "/settings", label: "הגדרות", icon: IconSettings, adminOnly: true },
 ];
 

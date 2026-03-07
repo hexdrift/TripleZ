@@ -6,6 +6,7 @@ import { IconChevronLeft } from "./icons";
 interface Crumb {
   label: string;
   href?: string;
+  icon?: React.ReactNode;
 }
 
 export function Breadcrumb({ items }: { items: Crumb[] }) {
@@ -17,13 +18,13 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
           {item.href ? (
             <Link
               href={item.href}
-              className="inline-flex items-center rounded-full border border-border/60 bg-background/75 px-3 py-1.5 font-semibold text-muted-foreground shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/70 hover:text-foreground"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/75 px-3 py-1.5 font-semibold text-muted-foreground shadow-[var(--shadow-inset)] transition-colors hover:bg-accent/70 hover:text-foreground"
             >
-              {item.label}
+              {item.icon}{item.label}
             </Link>
           ) : (
-            <span className="inline-flex items-center rounded-full border border-primary/15 bg-primary/[0.08] px-3 py-1.5 font-semibold text-foreground shadow-[var(--shadow-inset)]">
-              {item.label}
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/15 bg-primary/[0.08] px-3 py-1.5 font-semibold text-foreground shadow-[var(--shadow-inset)]">
+              {item.icon}{item.label}
             </span>
           )}
         </span>

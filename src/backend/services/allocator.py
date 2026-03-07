@@ -31,6 +31,7 @@ from src.backend.settings import (
     get_allowed_departments,
     get_allowed_genders,
     get_ranks_high_to_low,
+    load_settings,
 )
 from src.backend.schemas import RoomRef
 from src.backend.services.rank_policy import RankPolicy
@@ -38,8 +39,19 @@ from src.backend.store.base import RemoteStore
 
 
 def _locked_mutation(method):
+    """Decorator that acquires the instance's mutation lock before calling the method.
+
+    Args:
+        method: The instance method to wrap with lock acquisition.
+
+    Returns:
+        A wrapper function that holds ``_mutation_lock`` for the duration of
+        the call.
+    """
+
     @wraps(method)
     def wrapper(self, *args, **kwargs):
+        """Acquire the mutation lock, then delegate to the wrapped method."""
         with self._mutation_lock:
             return method(self, *args, **kwargs)
 
@@ -391,7 +403,18 @@ class RoomAllocatorCore:
         target_building: str,
         target_room_number: int,
     ) -> Tuple[bool, Optional[str]]:
-        """Assign an unassigned person directly into a specific room."""
+        """Assign an unassigned person directly into a specific room.
+
+        Args:
+            person_id: Identifier of the person to assign.
+            target_building: Building name where the target room is located.
+            target_room_number: Room number within the target building.
+
+        Returns:
+            A ``(success, error_message)`` tuple.  On success the error
+            message is ``None``; on failure it contains a Hebrew description
+            of the problem.
+        """
         pid = str(person_id)
         person = self._personnel_map().get(pid)
         if person is None:
@@ -409,7 +432,11 @@ class RoomAllocatorCore:
             return False, compatibility_error
 
         target_ids = json.loads(target["occupant_ids"])
-        avail = target["number_of_beds"] - len(target_ids)
+        reserved = self._get_reservations_by_room().get(target_id, 0)
+        # Don't count this person's own reservation against availability
+        if self._person_has_reservation_for_room(pid, target_id):
+            reserved = max(0, reserved - 1)
+        avail = target["number_of_beds"] - len(target_ids) - reserved
         if avail <= 0:
             return False, f"חדר היעד {target_building}#{target_room_number} מלא."
 
@@ -418,6 +445,8 @@ class RoomAllocatorCore:
 
         target_ids.append(pid)
         self._store.update("rooms", target_id, {"occupant_ids": json.dumps(target_ids)})
+        # Clean up fulfilled reservation
+        self._clear_person_reservation(pid)
         return True, None
 
     def get_person_room(self, person_id: str) -> Optional[RoomRef]:
@@ -447,6 +476,22 @@ class RoomAllocatorCore:
         """
         all_rooms = self._store.get_all("rooms")
         all_personnel = {p["person_id"]: p for p in self._store.get_all("personnel")}
+
+        reservations_by_room = self._get_reservations_by_room()
+        # Build per-room list of reserved person details
+        reserved_persons_by_room: Dict[str, list] = {}
+        settings = load_settings()
+        if settings.get("bed_reservation_policy", "reserve") == "reserve":
+            for sa in self._store.get_all("saved_assignments"):
+                room_id = f"{sa['building_name']}__{sa['room_number']}"
+                reserved_persons_by_room.setdefault(room_id, []).append({
+                    "person_id": sa["person_id"],
+                    "full_name": sa.get("full_name", ""),
+                    "department": sa.get("department", ""),
+                    "rank": sa.get("rank", ""),
+                    "saved_at": sa.get("saved_at", ""),
+                })
+
         rows = []
         for room in all_rooms:
             ids = json.loads(room["occupant_ids"])
@@ -457,6 +502,8 @@ class RoomAllocatorCore:
                 departments = [designated, *[department for department in occupant_departments if department != designated]]
             else:
                 departments = occupant_departments
+            raw_reserved = reservations_by_room.get(room["room_id"], 0)
+            reserved = min(raw_reserved, max(0, room["number_of_beds"] - len(ids)))
             rows.append({
                 "building_name": room["building_name"],
                 "room_number": room["room_number"],
@@ -467,12 +514,15 @@ class RoomAllocatorCore:
                 "gender": room["gender"],
                 "occupant_ids": ids,
                 "occupant_names": names,
-                "available_beds": max(0, room["number_of_beds"] - len(ids)),
+                "available_beds": max(0, room["number_of_beds"] - len(ids) - reserved),
+                "reserved_beds": reserved,
+                "reserved_persons": reserved_persons_by_room.get(room["room_id"], []),
                 "occupant_count": len(ids),
             })
         return pd.DataFrame(rows) if rows else pd.DataFrame(
             columns=["building_name", "room_number", "number_of_beds", "room_rank",
-                     "designated_department", "departments", "gender", "occupant_ids", "available_beds", "occupant_count"]
+                     "designated_department", "departments", "gender", "occupant_ids",
+                     "available_beds", "reserved_beds", "reserved_persons", "occupant_count"]
         )
 
     def links_df(self) -> pd.DataFrame:
@@ -524,7 +574,7 @@ class RoomAllocatorCore:
 
         for _, row in rooms_updates_df.iterrows():
             building = normalize_building(row["building_name"])
-            room_num = int(row["room_number"])
+            room_num = self._parse_positive_int(row["room_number"], label="מספר חדר")
             room_id = self._make_room_id(building, room_num)
 
             existing = current_rooms.get(room_id)
@@ -534,6 +584,7 @@ class RoomAllocatorCore:
                     next_state["number_of_beds"] = self._parse_positive_int(
                         row["number_of_beds"],
                         label=f"קיבולת עבור חדר {building}#{room_num}",
+                        max_value=100,
                     )
                 if "room_rank" in row.index and self._is_present(row.get("room_rank")):
                     next_state["room_rank"] = normalize_rank(str(row["room_rank"]))
@@ -622,8 +673,25 @@ class RoomAllocatorCore:
         if compatibility_error:
             return False, compatibility_error
 
+        # Verify reservations don't block the swap
+        reservations = self._get_reservations_by_room()
         ids_a = json.loads(room_a["occupant_ids"])
         ids_b = json.loads(room_b["occupant_ids"])
+
+        # After swap: room_a loses pid_a, gains pid_b (count stays same)
+        # But check pid_b's own reservation doesn't double-count
+        res_a = reservations.get(room_a["room_id"], 0)
+        if self._person_has_reservation_for_room(pid_b, room_a["room_id"]):
+            res_a = max(0, res_a - 1)
+        if len(ids_a) + res_a > room_a["number_of_beds"]:
+            return False, f"חדר {room_a['building_name']}#{room_a['room_number']} מלא (כולל מיטות שמורות)."
+
+        res_b = reservations.get(room_b["room_id"], 0)
+        if self._person_has_reservation_for_room(pid_a, room_b["room_id"]):
+            res_b = max(0, res_b - 1)
+        if len(ids_b) + res_b > room_b["number_of_beds"]:
+            return False, f"חדר {room_b['building_name']}#{room_b['room_number']} מלא (כולל מיטות שמורות)."
+
         ids_a.remove(pid_a)
         ids_a.append(pid_b)
         ids_b.remove(pid_b)
@@ -667,7 +735,11 @@ class RoomAllocatorCore:
             return False, compatibility_error
 
         target_ids = json.loads(target["occupant_ids"])
-        avail = target["number_of_beds"] - len(target_ids)
+        reserved = self._get_reservations_by_room().get(target_id, 0)
+        # Don't count this person's own reservation against availability
+        if self._person_has_reservation_for_room(pid, target_id):
+            reserved = max(0, reserved - 1)
+        avail = target["number_of_beds"] - len(target_ids) - reserved
         if avail <= 0:
             return False, f"חדר היעד {target_building}#{target_room_number} מלא."
         if pid in target_ids:
@@ -682,6 +754,8 @@ class RoomAllocatorCore:
         target_ids.append(pid)
         room_updates.append((target_id, {"occupant_ids": json.dumps(target_ids)}))
         self._store.bulk_update("rooms", room_updates)
+        # Clean up fulfilled reservation
+        self._clear_person_reservation(pid)
         return True, None
 
     @_locked_mutation
@@ -706,7 +780,13 @@ class RoomAllocatorCore:
 
     @_locked_mutation
     def reconcile_runtime_state(self) -> Dict[str, Any]:
-        """Repair persisted data so it matches current settings and room rules."""
+        """Repair persisted data so it matches current settings and room rules.
+
+        Returns:
+            A report dict with keys such as ``has_changes``,
+            ``removed_personnel_count``, ``removed_room_count``, and a
+            human-readable ``message`` summarising all repairs performed.
+        """
         allowed_departments = set(get_allowed_departments())
         allowed_ranks = set(get_ranks_high_to_low())
         allowed_genders = set(get_allowed_genders())
@@ -721,6 +801,7 @@ class RoomAllocatorCore:
             "removed_incompatible_occupants_count": 0,
             "removed_duplicate_assignments_count": 0,
             "trimmed_over_capacity_count": 0,
+            "removed_occupants": [],
             "messages": [],
         }
 
@@ -789,6 +870,11 @@ class RoomAllocatorCore:
                 person = personnel_by_id.get(person_id)
                 if person is None:
                     report["removed_unknown_occupants_count"] += 1
+                    report["removed_occupants"].append({
+                        "person_id": person_id,
+                        "building_name": room["building_name"],
+                        "room_number": int(room["room_number"]),
+                    })
                     continue
 
                 if person_id in seen_assignments:
@@ -864,6 +950,40 @@ class RoomAllocatorCore:
         report["message"] = " ".join(report["messages"])
         return report
 
+    def _get_reservations_by_room(self) -> Dict[str, int]:
+        """Return {room_id: count} of saved_assignments when policy is 'reserve'.
+
+        Filters out people who are already assigned to any room (prevents
+        double-counting) and people who no longer exist in personnel.
+        """
+        settings = load_settings()
+        policy = settings.get("bed_reservation_policy", "reserve")
+        result: Dict[str, int] = {}
+        if policy == "reserve":
+            currently_assigned: set = set()
+            for room in self._store.get_all("rooms"):
+                currently_assigned.update(json.loads(room["occupant_ids"]))
+            known_personnel = {p["person_id"] for p in self._store.get_all("personnel")}
+            for sa in self._store.get_all("saved_assignments"):
+                pid = sa["person_id"]
+                if pid in currently_assigned or pid not in known_personnel:
+                    continue
+                room_id = f"{sa['building_name']}__{sa['room_number']}"
+                result[room_id] = result.get(room_id, 0) + 1
+        return result
+
+    def _person_has_reservation_for_room(self, person_id: str, room_id: str) -> bool:
+        """Check if a person has a saved_assignment for a specific room."""
+        sa = self._store.get_by_id("saved_assignments", person_id)
+        if sa is None:
+            return False
+        return f"{sa['building_name']}__{sa['room_number']}" == room_id
+
+    def _clear_person_reservation(self, person_id: str) -> None:
+        """Delete a person's saved_assignment if it exists."""
+        if self._store.get_by_id("saved_assignments", person_id) is not None:
+            self._store.delete("saved_assignments", person_id)
+
     def _find_room_for_person(self, person_id: str) -> Optional[dict]:
         """Find the room dict containing the given person.
 
@@ -903,10 +1023,12 @@ class RoomAllocatorCore:
             return None
 
         all_personnel = {p["person_id"]: p for p in self._store.get_all("personnel")}
+        reservations = self._get_reservations_by_room()
         scored: List[Tuple[int, int, int, str, int, dict]] = []
         for room in candidates:
             ids = json.loads(room["occupant_ids"])
-            avail = room["number_of_beds"] - len(ids)
+            reserved = reservations.get(room["room_id"], 0)
+            avail = room["number_of_beds"] - len(ids) - reserved
             if avail <= 0:
                 continue
             dept_priority = self._department_fit_score(
@@ -1009,16 +1131,23 @@ class RoomAllocatorCore:
         return [str(value)]
 
     def _room_record_from_row(self, row: pd.Series) -> Dict[str, Any]:
-        """Normalize a room row into a validated record structure."""
+        """Normalize a room row into a validated record structure.
+
+        Args:
+            row: A single row from a rooms DataFrame.
+
+        Returns:
+            A dict with normalised room fields ready for store insertion.
+        """
         building = normalize_building(row["building_name"])
-        room_num = int(row["room_number"])
+        room_num = self._parse_positive_int(row["room_number"], label="מספר חדר")
         designated_dept = ""
         if "designated_department" in row.index and self._is_present(row.get("designated_department")):
             designated_dept = normalize_department(str(row["designated_department"]))
         return {
             "building_name": building,
             "room_number": room_num,
-            "number_of_beds": self._parse_positive_int(row["number_of_beds"], label=f"קיבולת עבור חדר {building}#{room_num}"),
+            "number_of_beds": self._parse_positive_int(row["number_of_beds"], label=f"קיבולת עבור חדר {building}#{room_num}", max_value=100),
             "room_rank": normalize_rank(str(row["room_rank"])),
             "gender": normalize_gender(str(row["gender"])),
             "designated_department": designated_dept,
@@ -1031,7 +1160,18 @@ class RoomAllocatorCore:
         *,
         personnel_by_id: Optional[Dict[str, dict]] = None,
     ) -> None:
-        """Validate room records before they are written to the store."""
+        """Validate room records before they are written to the store.
+
+        Args:
+            rooms: List of room record dicts to validate.
+            personnel_by_id: Optional mapping of person_id to personnel
+                record.  When provided, occupant compatibility checks are
+                also performed.
+
+        Raises:
+            ValueError: If any room record violates capacity, gender,
+                uniqueness, or compatibility constraints.
+        """
         assigned_to_room: Dict[str, str] = {}
         allowed_genders = get_allowed_genders()
 
@@ -1065,6 +1205,12 @@ class RoomAllocatorCore:
                 assigned_to_room[person_id] = room_label
 
     def _personnel_map(self) -> Dict[str, dict]:
+        """Build a dict mapping person_id to personnel record.
+
+        Returns:
+            A dict keyed by ``person_id`` (str) with personnel record dicts
+            as values.
+        """
         return {
             str(person["person_id"]): person
             for person in self._store.get_all("personnel")
@@ -1072,6 +1218,17 @@ class RoomAllocatorCore:
 
     @staticmethod
     def _room_person_compatibility_error(room: dict, person: dict) -> Optional[str]:
+        """Check gender compatibility between a room and a person.
+
+        Args:
+            room: Room record dict containing at least a ``gender`` key.
+            person: Personnel record dict containing ``person_id`` and
+                ``gender`` keys.
+
+        Returns:
+            A Hebrew error string if the person is incompatible with the
+            room, or ``None`` if compatible.
+        """
         if str(person["gender"]) != str(room["gender"]):
             return (
                 f"לאדם {person['person_id']} מגדר '{person['gender']}' "
@@ -1087,6 +1244,19 @@ class RoomAllocatorCore:
         occupant_ids: list[str],
         personnel_by_id: Dict[str, dict],
     ) -> int:
+        """Score how well a person's department fits a room.
+
+        Lower scores indicate a better fit (0 = best).
+
+        Args:
+            room: Room record dict, may contain ``designated_department``.
+            department: The department of the person being considered.
+            occupant_ids: List of person_ids currently occupying the room.
+            personnel_by_id: Mapping of person_id to personnel record.
+
+        Returns:
+            An integer score from 0 (ideal match) to 5 (worst match).
+        """
         designated_department = str(room.get("designated_department") or "").strip()
         occupant_departments = {
             str(personnel_by_id[person_id]["department"]).strip()
@@ -1114,6 +1284,18 @@ class RoomAllocatorCore:
         person_rank: str,
         personnel_by_id: Dict[str, dict],
     ) -> int:
+        """Score how well a person's rank fits with existing occupants.
+
+        Lower scores indicate a better fit (0 = best).
+
+        Args:
+            occupant_ids: List of person_ids currently occupying the room.
+            person_rank: The rank of the person being considered.
+            personnel_by_id: Mapping of person_id to personnel record.
+
+        Returns:
+            An integer score from 0 (identical or empty) to 2 (no overlap).
+        """
         occupant_ranks = {
             str(personnel_by_id[person_id]["rank"]).strip()
             for person_id in occupant_ids
@@ -1126,12 +1308,27 @@ class RoomAllocatorCore:
         return 2
 
     @staticmethod
-    def _parse_positive_int(value: Any, *, label: str) -> int:
-        """Parse a positive integer from user-provided input."""
+    def _parse_positive_int(value: Any, *, label: str, max_value: int | None = None) -> int:
+        """Parse a positive integer from user-provided input.
+
+        Args:
+            value: Raw value to parse (may be string, float, etc.).
+            label: Human-readable label used in error messages.
+            max_value: Optional upper bound for the parsed integer.
+
+        Returns:
+            The parsed positive integer.
+
+        Raises:
+            ValueError: If the value is not numeric, not positive, or
+                exceeds ``max_value``.
+        """
         parsed = pd.to_numeric(value, errors="coerce")
         if pd.isna(parsed):
             raise ValueError(f"ערך לא תקין עבור {label}.")
         parsed_int = int(parsed)
         if parsed_int <= 0:
             raise ValueError(f"הערך של {label} חייב להיות גדול מאפס.")
+        if max_value is not None and parsed_int > max_value:
+            raise ValueError(f"הערך של {label} חייב להיות לכל היותר {max_value}.")
         return parsed_int

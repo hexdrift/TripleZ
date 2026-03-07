@@ -22,7 +22,14 @@ _SESSION_SECRET_FILE = ".triplez_session_secret"
 
 
 def default_department_password(department: str) -> str:
-    """Return the default password for a department."""
+    """Return the default password for a department.
+
+    Args:
+        department: Department name.
+
+    Returns:
+        Password string in the form ``{department}123``.
+    """
     return f"{str(department).strip()}123"
 
 
@@ -45,6 +52,8 @@ DEFAULTS: Dict[str, Any] = {
     "personnel_sync_interval_seconds": 30,
     "personnel_sync_paused": False,
     "auto_assign_policy": "department_first",
+    "api_key": "",
+    "bed_reservation_policy": "reserve",
     "admin_password": "admin123",
     "dept_passwords": {
         department: default_department_password(department)
@@ -91,7 +100,11 @@ def _settings_path() -> str:
 
 
 def get_session_secret() -> str:
-    """Return the persistent secret used to sign auth sessions."""
+    """Return the persistent secret used to sign auth sessions.
+
+    Returns:
+        URL-safe secret string, generated on first call and persisted to disk.
+    """
     path = get_runtime_storage_dir() / _SESSION_SECRET_FILE
     try:
         secret = path.read_text(encoding="utf-8").strip()
@@ -208,22 +221,45 @@ def get_allowed_buildings() -> set[str]:
 
 
 def get_personnel_sync_interval_seconds() -> int:
-    """Return the active personnel sync interval in seconds."""
+    """Return the active personnel sync interval in seconds.
+
+    Returns:
+        Interval in seconds (fixed at startup default).
+    """
     return FIXED_PERSONNEL_SYNC_INTERVAL_SECONDS
 
 
 def is_personnel_sync_paused() -> bool:
-    """Return whether background personnel sync is paused."""
+    """Return whether background personnel sync is paused.
+
+    Returns:
+        True if sync is currently paused.
+    """
     return bool(load_settings()["personnel_sync_paused"])
 
 
 def get_auto_assign_policy() -> str:
-    """Return the active auto-assignment policy."""
+    """Return the active auto-assignment policy.
+
+    Returns:
+        Policy string (fixed at startup default).
+    """
     return FIXED_AUTO_ASSIGN_POLICY
 
 
 def validate_personnel_source_url(url: str) -> str:
-    """Validate and normalize the configured personnel source URL."""
+    """Validate and normalize the configured personnel source URL.
+
+    Args:
+        url: Raw URL string (may be empty).
+
+    Returns:
+        Cleaned URL string, or empty string if *url* was blank.
+
+    Raises:
+        ValueError: If the URL scheme is not http/https, the host is missing,
+            or credentials are embedded in the URL.
+    """
     value = str(url or "").strip()
     if not value:
         return ""

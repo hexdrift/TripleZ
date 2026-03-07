@@ -364,3 +364,19 @@ export function IconMove({ size, className }: IconProps = defaults) {
     <line x1="12" y1="2" x2="12" y2="22" />
   </>);
 }
+
+export function IconCopy({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </>);
+}
+
+export function IconClipboardList({ size, className }: IconProps = defaults) {
+  return svg(size ?? 20, className ?? "", <>
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+    <path d="M12 11h4" /><path d="M12 16h4" />
+    <path d="M8 11h.01" /><path d="M8 16h.01" />
+  </>);
+}

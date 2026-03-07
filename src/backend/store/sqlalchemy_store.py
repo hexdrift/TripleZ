@@ -20,7 +20,14 @@ from src.backend.store.base import RemoteStore
 
 
 def _build_tables(metadata: MetaData) -> dict[str, Table]:
-    """Define the rooms and personnel tables."""
+    """Define the rooms and personnel tables.
+
+    Args:
+        metadata: SQLAlchemy MetaData instance to bind the tables to.
+
+    Returns:
+        dict[str, Table]: Mapping of table name to SQLAlchemy Table object.
+    """
     rooms = Table(
         "rooms",
         metadata,
@@ -65,11 +72,25 @@ def _build_tables(metadata: MetaData) -> dict[str, Table]:
         Column("details", Text, nullable=False, server_default="{}"),
     )
 
+    saved_assignments = Table(
+        "saved_assignments",
+        metadata,
+        Column("person_id", String, primary_key=True),
+        Column("building_name", String, nullable=False),
+        Column("room_number", Integer, nullable=False),
+        Column("full_name", String, nullable=False),
+        Column("department", String, nullable=False),
+        Column("gender", String, nullable=False),
+        Column("rank", String, nullable=False),
+        Column("saved_at", String, nullable=False),
+    )
+
     return {
         "rooms": rooms,
         "personnel": personnel,
         "app_meta": app_meta,
         "audit_log": audit_log,
+        "saved_assignments": saved_assignments,
     }
 
 
@@ -77,6 +98,11 @@ class SQLAlchemyStore(RemoteStore):
     """SQLAlchemy-backed implementation of RemoteStore."""
 
     def __init__(self, database_url: str) -> None:
+        """Initialise the store, creating tables if they don't exist.
+
+        Args:
+            database_url: SQLAlchemy connection string (e.g. ``"sqlite:///data.db"``).
+        """
         engine_kwargs = {"echo": False}
         if database_url.startswith("sqlite:"):
             engine_kwargs["connect_args"] = {"check_same_thread": False}
@@ -91,18 +117,41 @@ class SQLAlchemyStore(RemoteStore):
             "personnel": "person_id",
             "app_meta": "key",
             "audit_log": "event_id",
+            "saved_assignments": "person_id",
         }
 
     def _session(self) -> Session:
+        """Create a new SQLAlchemy session.
+
+        Returns:
+            Session: A new database session bound to the engine.
+        """
         return self._Session()
 
     def get_all(self, table: str) -> list[dict]:
+        """Return every row in the given table.
+
+        Args:
+            table: Logical table name (e.g. ``"rooms"``, ``"personnel"``).
+
+        Returns:
+            list[dict]: All rows, each as a column-name-to-value dict.
+        """
         tbl = self._tables[table]
         with self._session() as session:
             rows = session.execute(tbl.select()).mappings().all()
             return [dict(r) for r in rows]
 
     def get_by_id(self, table: str, pk_value: Any) -> Optional[dict]:
+        """Fetch a single row by its primary key.
+
+        Args:
+            table: Logical table name.
+            pk_value: Primary key value to look up.
+
+        Returns:
+            Optional[dict]: The matching row as a dict, or None if not found.
+        """
         tbl = self._tables[table]
         pk_col = tbl.c[self._pks[table]]
         with self._session() as session:
@@ -112,6 +161,16 @@ class SQLAlchemyStore(RemoteStore):
             return dict(row) if row else None
 
     def query(self, table: str, filters: dict) -> list[dict]:
+        """Return rows matching all column equality filters.
+
+        Args:
+            table: Logical table name.
+            filters: Mapping of column name to required value; all conditions
+                are ANDed together.
+
+        Returns:
+            list[dict]: Matching rows, each as a column-name-to-value dict.
+        """
         tbl = self._tables[table]
         stmt = tbl.select()
         for col_name, value in filters.items():
@@ -121,12 +180,25 @@ class SQLAlchemyStore(RemoteStore):
             return [dict(r) for r in rows]
 
     def insert(self, table: str, row: dict) -> None:
+        """Insert a single row into the given table.
+
+        Args:
+            table: Logical table name.
+            row: Column-name-to-value mapping for the new row.
+        """
         tbl = self._tables[table]
         with self._session() as session:
             session.execute(tbl.insert().values(**row))
             session.commit()
 
     def update(self, table: str, pk_value: Any, updates: dict) -> None:
+        """Update a single row identified by its primary key.
+
+        Args:
+            table: Logical table name.
+            pk_value: Primary key of the row to update.
+            updates: Column-name-to-new-value mapping for the columns to change.
+        """
         tbl = self._tables[table]
         pk_col = tbl.c[self._pks[table]]
         with self._session() as session:
@@ -136,6 +208,12 @@ class SQLAlchemyStore(RemoteStore):
             session.commit()
 
     def delete(self, table: str, pk_value: Any) -> None:
+        """Delete a single row identified by its primary key.
+
+        Args:
+            table: Logical table name.
+            pk_value: Primary key of the row to delete.
+        """
         tbl = self._tables[table]
         pk_col = tbl.c[self._pks[table]]
         with self._session() as session:
@@ -143,12 +221,24 @@ class SQLAlchemyStore(RemoteStore):
             session.commit()
 
     def delete_all(self, table: str) -> None:
+        """Delete every row in the given table.
+
+        Args:
+            table: Logical table name.
+        """
         tbl = self._tables[table]
         with self._session() as session:
             session.execute(tbl.delete())
             session.commit()
 
     def bulk_update(self, table: str, updates: list[tuple[Any, dict]]) -> None:
+        """Update multiple rows in a single transaction.
+
+        Args:
+            table: Logical table name.
+            updates: List of ``(pk_value, column_updates)`` pairs, where each
+                ``column_updates`` is a column-name-to-new-value dict.
+        """
         tbl = self._tables[table]
         pk_col = tbl.c[self._pks[table]]
         with self._session() as session:

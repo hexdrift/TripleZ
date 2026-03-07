@@ -319,6 +319,7 @@ class SetRoomDepartmentRequest(BaseModel):
     @field_validator("department", mode="before")
     @classmethod
     def v_department(_cls, v: Any) -> Any:
+        """Normalize department if provided, or return None for empty values."""
         if v is None or (isinstance(v, str) and not v.strip()):
             return None
         return normalize_department(v)
@@ -351,6 +352,7 @@ class AutoAssignRequest(BaseModel):
     @field_validator("department", mode="before")
     @classmethod
     def v_department(_cls, v: Any) -> Any:
+        """Normalize department if provided, or return None for empty values."""
         if v is None or (isinstance(v, str) and not v.strip()):
             return None
         return normalize_department(v)

@@ -22,7 +22,12 @@ router = APIRouter()
 
 @router.get("/auth/context")
 def auth_context(session: AuthSession = Depends(require_authenticated)) -> dict:
-    """Return authenticated auth-related runtime metadata."""
+    """Return authenticated auth-related runtime metadata.
+
+    Returns:
+        Dict with departments, personnel URL, ranks, and genders from
+        current settings.
+    """
     settings = load_settings()
     return {
         "departments": settings.get("departments", []),
@@ -36,7 +41,15 @@ def auth_context(session: AuthSession = Depends(require_authenticated)) -> dict:
 def auth_me(
     triplez_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
 ) -> LoginResponse:
-    """Return the active authenticated session."""
+    """Return the active authenticated session.
+
+    Args:
+        triplez_session: Session cookie value, or None when absent.
+
+    Returns:
+        LoginResponse with ok=True and role/department when valid, or
+        ok=False when the cookie is missing or expired.
+    """
     if not triplez_session:
         return LoginResponse(ok=False)
     session = decode_session_token(triplez_session)
@@ -93,6 +106,10 @@ def login(req: LoginRequest, response: Response) -> LoginResponse:
 
 @router.post("/auth/logout")
 def logout(response: Response) -> dict:
-    """Clear the active auth session."""
+    """Clear the active auth session.
+
+    Returns:
+        Dict with ``ok: True`` confirming the session was cleared.
+    """
     response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
     return {"ok": True}

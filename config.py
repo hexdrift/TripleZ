@@ -115,6 +115,15 @@ def __getattr__(name: str) -> Any:
 
 
 def _candidate_values(value: str, aliases: dict[str, Iterable[str]]) -> list[str]:
+    """Expand a value into all candidate strings using case variants and aliases.
+
+    Args:
+        value: The original string to expand.
+        aliases: Mapping of known values to their alias tuples.
+
+    Returns:
+        Deduplicated list of candidate strings to try for matching.
+    """
     keys = [value]
     upper = value.upper()
     lower = value.lower()
@@ -146,10 +155,10 @@ def normalize_rank(value: Any) -> str:
         ValueError: If missing/empty.
     """
     if value is None:
-        raise ValueError("rank is required")
+        raise ValueError("דרגה היא שדה חובה")
     s = str(value).strip()
     if not s:
-        raise ValueError("rank is required")
+        raise ValueError("דרגה היא שדה חובה")
     allowed = get_allowed_ranks()
     for candidate in _candidate_values(s, _RANK_ALIASES):
         if candidate in allowed:
@@ -170,10 +179,10 @@ def normalize_gender(value: Any) -> str:
         ValueError: If missing/empty.
     """
     if value is None:
-        raise ValueError("gender is required")
+        raise ValueError("מגדר הוא שדה חובה")
     s = str(value).strip()
     if not s:
-        raise ValueError("gender is required")
+        raise ValueError("מגדר הוא שדה חובה")
     allowed = get_allowed_genders()
     for candidate in _candidate_values(s, _GENDER_ALIASES):
         if candidate in allowed:
@@ -194,15 +203,15 @@ def normalize_department(value: Any) -> str:
         ValueError: If missing/empty or not in allowed departments.
     """
     if value is None:
-        raise ValueError("department is required")
+        raise ValueError("זירה היא שדה חובה")
     s = str(value).strip()
     if not s:
-        raise ValueError("department is required")
+        raise ValueError("זירה היא שדה חובה")
     allowed = get_allowed_departments()
     for candidate in _candidate_values(s, _DEPARTMENT_ALIASES):
         if candidate in allowed:
             return candidate
-    raise ValueError(f"Invalid department '{s}'. Allowed: {sorted(allowed)}")
+    raise ValueError(f"זירה לא תקינה '{s}'. ערכים מותרים: {sorted(allowed)}")
 
 
 def normalize_building(value: Any) -> str:
@@ -218,15 +227,15 @@ def normalize_building(value: Any) -> str:
         ValueError: If missing/empty or not in allowed buildings.
     """
     if value is None:
-        raise ValueError("building_name is required")
+        raise ValueError("שם מבנה הוא שדה חובה")
     s = str(value).strip()
     if not s:
-        raise ValueError("building_name is required")
+        raise ValueError("שם מבנה הוא שדה חובה")
     allowed = get_allowed_buildings()
     for candidate in _candidate_values(s, _BUILDING_ALIASES):
         if candidate in allowed:
             return candidate
-    raise ValueError(f"Invalid building_name '{s}'. Allowed: {sorted(allowed)}")
+    raise ValueError(f"שם מבנה לא תקין '{s}'. ערכים מותרים: {sorted(allowed)}")
 
 
 def normalize_name(value: Any) -> str:
@@ -242,10 +251,10 @@ def normalize_name(value: Any) -> str:
         ValueError: If missing/empty.
     """
     if value is None:
-        raise ValueError("name is required")
+        raise ValueError("שם הוא שדה חובה")
     s = str(value).strip()
     if not s:
-        raise ValueError("name is required")
+        raise ValueError("שם הוא שדה חובה")
     return s
 
 

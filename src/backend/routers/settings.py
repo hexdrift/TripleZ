@@ -24,6 +24,18 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _clean_string_list(value: Any, *, field_name: str) -> list[str]:
+    """Deduplicate and strip a raw list of strings from user input.
+
+    Args:
+        value: The raw value expected to be a list of strings.
+        field_name: Human-readable field name used in error messages.
+
+    Returns:
+        A deduplicated list of non-empty stripped strings.
+
+    Raises:
+        ValueError: If *value* is not a list or yields no valid items.
+    """
     if not isinstance(value, list):
         raise ValueError(f"השדה '{field_name}' חייב להיות רשימת טקסטים")
 
@@ -41,6 +53,19 @@ def _clean_string_list(value: Any, *, field_name: str) -> list[str]:
 
 
 def _sanitize_settings(payload: Dict[str, Any], *, replace: bool = False) -> Dict[str, Any]:
+    """Merge and validate an incoming settings payload against the current or default settings.
+
+    Args:
+        payload: Partial or full settings dictionary from the client.
+        replace: When True, start from DEFAULTS instead of the persisted
+            settings.
+
+    Returns:
+        A fully merged and validated settings dictionary.
+
+    Raises:
+        ValueError: If any field in *payload* fails validation.
+    """
     base = deepcopy(DEFAULTS if replace else load_settings())
 
     if "ranks_high_to_low" in payload:
@@ -55,8 +80,17 @@ def _sanitize_settings(payload: Dict[str, Any], *, replace: bool = False) -> Dic
     if "personnel_url" in payload:
         base["personnel_url"] = validate_personnel_source_url(payload["personnel_url"])
 
+    if "api_key" in payload:
+        base["api_key"] = str(payload["api_key"] or "").strip()
+
     if "personnel_sync_paused" in payload:
         base["personnel_sync_paused"] = bool(payload["personnel_sync_paused"])
+
+    if "bed_reservation_policy" in payload:
+        policy = str(payload["bed_reservation_policy"] or "reserve").strip()
+        if policy not in ("reserve", "best_effort"):
+            raise ValueError("מדיניות שמירת מיטות חייבת להיות 'reserve' או 'best_effort'")
+        base["bed_reservation_policy"] = policy
 
     if "admin_password" in payload:
         admin_password = str(payload["admin_password"] or "").strip()
@@ -85,10 +119,12 @@ def _sanitize_settings(payload: Dict[str, Any], *, replace: bool = False) -> Dic
 
 
 def _serialize_personnel_for_export() -> list[dict[str, Any]]:
+    """Return all personnel rows sorted by person_id for deterministic export."""
     return sorted(store.get_all("personnel"), key=lambda row: str(row["person_id"]))
 
 
 def _serialize_rooms_for_export() -> list[dict[str, Any]]:
+    """Return all rooms with occupant state, sorted by building then room number."""
     rooms = core.rooms_with_state()
     if rooms.empty:
         return []
@@ -109,17 +145,117 @@ def _serialize_rooms_for_export() -> list[dict[str, Any]]:
 
 
 def _restore_table(table: str, rows: list[dict[str, Any]]) -> None:
+    """Replace all rows of a store table with the given backup rows.
+
+    Args:
+        table: Store table name to restore.
+        rows: List of row dicts to insert after clearing.
+    """
     store.delete_all(table)
     for row in rows:
         store.insert(table, row)
 
 
 def _enriched_sync_status(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a sync-status dict enriched with configuration flags.
+
+    Args:
+        settings: The current application settings.
+
+    Returns:
+        Dict combining persisted sync status with configuration metadata.
+    """
     return {
         **get_sync_status(store),
         "configured": bool(str(settings.get("personnel_url", "")).strip()),
         "paused": bool(settings.get("personnel_sync_paused", False)),
         "interval_seconds": int(settings.get("personnel_sync_interval_seconds", 30)),
+    }
+
+
+@router.post("/admin/settings/check-impact")
+def check_settings_impact(
+    body: Dict[str, Any],
+    session: AuthSession = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Preview what data would be affected if settings were saved.
+
+    Args:
+        body: Proposed settings payload to evaluate.
+
+    Returns:
+        Dict with ``has_impact`` flag, human-readable detail strings, and
+        lists of affected personnel/rooms.
+    """
+    del session
+    try:
+        proposed = _sanitize_settings(body, replace=False)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    current = load_settings()
+    removed_depts = set(current["departments"]) - set(proposed["departments"])
+    removed_ranks = set(current["ranks_high_to_low"]) - set(proposed["ranks_high_to_low"])
+    removed_genders = set(current["genders"]) - set(proposed["genders"])
+    removed_buildings = set(current["buildings"]) - set(proposed["buildings"])
+
+    if not (removed_depts or removed_ranks or removed_genders or removed_buildings):
+        return {"has_impact": False, "details": []}
+
+    personnel = store.get_all("personnel")
+    rooms = store.get_all("rooms")
+    details: list[str] = []
+
+    for dept in sorted(removed_depts):
+        count = sum(1 for p in personnel if p.get("department") == dept)
+        if count:
+            details.append(f"הסרת הזירה '{dept}' תמחק {count} אנשי כוח אדם")
+
+    for rank in sorted(removed_ranks):
+        p_count = sum(1 for p in personnel if p.get("rank") == rank)
+        r_count = sum(1 for r in rooms if r.get("room_rank") == rank)
+        parts = []
+        if p_count:
+            parts.append(f"{p_count} אנשי כוח אדם")
+        if r_count:
+            parts.append(f"{r_count} חדרים")
+        if parts:
+            details.append(f"הסרת הדרגה '{rank}' תמחק " + " ו-".join(parts))
+
+    for gender in sorted(removed_genders):
+        p_count = sum(1 for p in personnel if p.get("gender") == gender)
+        r_count = sum(1 for r in rooms if r.get("gender") == gender)
+        parts = []
+        if p_count:
+            parts.append(f"{p_count} אנשי כוח אדם")
+        if r_count:
+            parts.append(f"{r_count} חדרים")
+        if parts:
+            details.append(f"הסרת המגדר '{gender}' תמחק " + " ו-".join(parts))
+
+    for building in sorted(removed_buildings):
+        count = sum(1 for r in rooms if r.get("building_name") == building)
+        if count:
+            details.append(f"הסרת המבנה '{building}' תמחק {count} חדרים")
+
+    affected_personnel = [
+        p for p in personnel
+        if p.get("department") in removed_depts
+        or p.get("rank") in removed_ranks
+        or p.get("gender") in removed_genders
+    ]
+    affected_rooms = [
+        r for r in rooms
+        if r.get("building_name") in removed_buildings
+        or r.get("room_rank") in removed_ranks
+        or r.get("gender") in removed_genders
+    ]
+
+    return {
+        "has_impact": len(details) > 0,
+        "details": details,
+        "affected_personnel": affected_personnel,
+        "affected_rooms": affected_rooms,
     }
 
 
@@ -160,6 +296,12 @@ def update_settings(
     try:
         save_settings(settings)
         reload_runtime_settings()
+        # Clean up saved_assignments when policy changes away from "reserve"
+        if (
+            settings.get("bed_reservation_policy") != "reserve"
+            and settings_backup.get("bed_reservation_policy", "reserve") == "reserve"
+        ):
+            store.delete_all("saved_assignments")
         integrity_report = core.reconcile_runtime_state()
         bump_version()
         append_audit_event(
@@ -193,7 +335,11 @@ def update_settings(
 
 @router.get("/admin/setup-package")
 def export_setup_package(session: AuthSession = Depends(require_admin)) -> Dict[str, Any]:
-    """Export settings, rooms, and personnel as a reproducible setup package."""
+    """Export settings, rooms, and personnel as a reproducible setup package.
+
+    Returns:
+        Versioned dict containing settings, rooms, and personnel snapshots.
+    """
     del session
     return {
         "version": 1,
@@ -209,7 +355,15 @@ def import_setup_package(
     body: Dict[str, Any],
     session: AuthSession = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Import a full setup package atomically."""
+    """Import a full setup package atomically.
+
+    Args:
+        body: Setup-package dict containing ``settings``, ``rooms``, and
+            ``personnel`` keys.
+
+    Returns:
+        Dict with ok status, counts, integrity report, and sync status.
+    """
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="גוף בקשת חבילת ההגדרה חייב להיות אובייקט JSON")
 
@@ -232,6 +386,8 @@ def import_setup_package(
         next_settings = _sanitize_settings(settings_payload, replace=True)
         save_settings(next_settings)
         reload_runtime_settings()
+
+        store.delete_all("saved_assignments")
 
         personnel_df = pd.DataFrame(personnel_payload, columns=list(core.REQUIRED_PERSONNEL_COLS))
         rooms_df = pd.DataFrame(

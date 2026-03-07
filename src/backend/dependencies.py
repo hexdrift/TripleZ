@@ -63,3 +63,16 @@ def get_data_version() -> int:
         The current version as an integer.
     """
     return _data_version
+
+
+def mutation_lock():
+    """Return the core's reentrant mutation lock.
+
+    Use as a context manager around version checks + core calls to prevent
+    TOCTOU races:
+
+        with mutation_lock():
+            assert_expected_version(req.expected_version)
+            core.some_mutation(...)
+    """
+    return core._mutation_lock
