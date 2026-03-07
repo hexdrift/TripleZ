@@ -797,11 +797,14 @@ def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     store.delete_all("rooms")
     store.delete_all("personnel")
     bump_version()
-    append_audit_event(store, {
-        "action": "reset_all",
-        "actor_role": session.role,
-        "actor_department": session.department,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    append_audit_event(
+        store,
+        actor_role=session.role,
+        actor_department=_actor_department(session),
+        action="reset_all",
+        entity_type="system",
+        entity_id="all",
+        message="כל הנתונים אופסו",
+    )
     logger.info("All rooms and personnel data reset by %s", session.role)
     return SimpleOK(ok=True)
