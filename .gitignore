@@ -31,6 +31,9 @@ Thumbs.db
 .env
 .env.*
 
+# Sample data
+data/
+
 # TripleZ runtime local files
 triplez_settings.json
 .triplez_session_secret
