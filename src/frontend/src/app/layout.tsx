@@ -31,13 +31,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div id="app-splash" aria-hidden="true">
           <h1>Triple Z</h1>
         </div>
-        <main>
-          <Providers>
-            <TooltipProvider>
-              <AppShell>{children}</AppShell>
-            </TooltipProvider>
-          </Providers>
-        </main>
+        <Providers>
+          <TooltipProvider>
+            <AppShell>{children}</AppShell>
+          </TooltipProvider>
+        </Providers>
         <LazyToastContainer />
       </body>
     </html>

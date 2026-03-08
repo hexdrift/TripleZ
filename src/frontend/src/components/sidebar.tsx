@@ -29,7 +29,8 @@ import { useAppData } from "./app-shell";
 import { useAuth, roleLabelHe } from "./auth-provider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { VisuallyHidden } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -198,7 +199,10 @@ export function Sidebar({ buildings, viewMode, rooms, collapsed, onToggleCollaps
 
       {/* Mobile sheet */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="right" showCloseButton={false} className="w-[320px] max-w-[90vw] p-0">
+        <SheetContent side="right" showCloseButton={false} className="w-[320px] max-w-[90vw] p-0" aria-describedby={undefined}>
+          <VisuallyHidden.Root>
+            <SheetTitle>תפריט ניווט</SheetTitle>
+          </VisuallyHidden.Root>
           <SidebarPane
             authLabel={roleLabelHe(auth)}
             currentUrl={currentUrl}
