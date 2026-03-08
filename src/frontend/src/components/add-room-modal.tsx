@@ -260,7 +260,7 @@ function RoomForm({
                 <SelectContent>
                   {buildings.map((item) => (
                     <SelectItem key={item} value={item}>
-                      {`מבנה ${buildingHe(item)}`}
+                      {buildingHe(item)}
                     </SelectItem>
                   ))}
                 </SelectContent>

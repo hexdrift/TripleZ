@@ -61,8 +61,8 @@ export function GroupCard({ icon, title, subtitle, totalBeds, occupiedBeds, avai
 
           <div className="grid grid-cols-3 gap-2">
             <MiniStat icon={<IconBed size={13} />} label="מיטות" value={totalBeds} />
-            <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={occupiedBeds} tone="warning" />
-            <MiniStat icon={<IconBed size={13} />} label="פנויים" value={availableBeds} tone="accent" />
+            <MiniStat icon={<IconBedOff size={13} />} label="תפוסות" value={occupiedBeds} tone="warning" />
+            <MiniStat icon={<IconBed size={13} />} label="פנויות" value={availableBeds} tone="accent" />
           </div>
         </CardContent>
       </Card>

@@ -7,17 +7,18 @@ import { BuildingCard } from "@/components/building-card";
 import { DepartmentCard } from "@/components/department-card";
 import { GroupCard } from "@/components/group-card";
 import { StatCard } from "@/components/stat-card";
-import { autoAssignUnassigned, departmentSummaries, genderSummaries, rankSummaries } from "@/lib/api";
+import { buildingSummaries, departmentSummaries, genderSummaries, rankSummaries } from "@/lib/api";
 import { exportToExcel } from "@/lib/export";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import { ViewMode } from "@/lib/types";
+import { isRoomVisibleToManagerWithMap, deptBedCounts, adminDeptSummaries } from "@/lib/room-utils";
 import { IconBed, IconBedOff, IconBuilding, IconCrown, IconDoor, IconDownload, IconFemale, IconGender, IconMale, IconSwap, IconUsers } from "@/components/icons";
 import { toast } from "react-toastify";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { AutoAssignModal } from "@/components/auto-assign-modal";
 
 const DashboardAnalytics = dynamic(
   () => import("@/components/dashboard-analytics").then((module) => module.DashboardAnalytics),
@@ -58,37 +59,71 @@ const VIEW_COUNT_LABELS: Record<ViewMode, string> = {
 };
 
 function DashboardContent() {
-  const { rooms, buildings, personnel, dataVersion, loading, auth, viewMode, setViewMode } = useAppData();
+  const { rooms, buildings: allBuildings, personnel, dataVersion, loading, auth, viewMode, setViewMode } = useAppData();
   const [addRoomOpen, setAddRoomOpen] = useState(false);
   const [addPersonnelOpen, setAddPersonnelOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
-  const [autoAssignLoading, setAutoAssignLoading] = useState(false);
-  const [autoAssignConfirmOpen, setAutoAssignConfirmOpen] = useState(false);
+  const [autoAssignOpen, setAutoAssignOpen] = useState(false);
 
-  const departments = useMemo(() => departmentSummaries(rooms), [rooms]);
-  const genders = useMemo(() => genderSummaries(rooms), [rooms]);
-  const ranks = useMemo(() => rankSummaries(rooms), [rooms]);
   const personnelMap = useMemo(
     () => new Map(personnel.map((person) => [person.person_id, person])),
     [personnel],
   );
+
+  // For managers: scope rooms and personnel to their department
+  const isManager = auth.role === "manager";
+  const managerDept = auth.department || "";
+
+  const scopedRooms = useMemo(() => {
+    if (!isManager) return rooms;
+    return rooms.filter((r) => isRoomVisibleToManagerWithMap(r, managerDept, personnelMap));
+  }, [rooms, isManager, managerDept, personnelMap]);
+
+  const scopedPersonnel = useMemo(() => {
+    if (!isManager) return personnel;
+    return personnel.filter((p) => p.department === managerDept);
+  }, [personnel, isManager, managerDept]);
+
+  const departments = useMemo(
+    () => isManager ? departmentSummaries(scopedRooms) : adminDeptSummaries(scopedRooms, personnelMap),
+    [scopedRooms, isManager, personnelMap],
+  );
+  const genders = useMemo(() => genderSummaries(scopedRooms), [scopedRooms]);
+  const ranks = useMemo(() => rankSummaries(scopedRooms), [scopedRooms]);
+
+  const buildings = useMemo(
+    () => (isManager ? buildingSummaries(scopedRooms) : allBuildings),
+    [isManager, scopedRooms, allBuildings],
+  );
+
   const assignedIdSet = useMemo(
-    () => new Set(rooms.flatMap((room) => room.occupant_ids)),
-    [rooms],
+    () => new Set(scopedRooms.flatMap((room) => room.occupant_ids)),
+    [scopedRooms],
   );
 
   const metrics = useMemo(() => {
-    const totalBeds = rooms.reduce((s, r) => s + r.number_of_beds, 0);
-    const occupied = rooms.reduce((s, r) => s + r.occupant_count, 0);
-    const available = rooms.reduce((s, r) => s + r.available_beds, 0);
+    if (isManager) {
+      let totalBeds = 0, occupied = 0, available = 0;
+      for (const r of scopedRooms) {
+        const c = deptBedCounts(r, managerDept, personnelMap);
+        totalBeds += c.deptTotal;
+        occupied += c.deptOccupied;
+        available += c.deptAvailable;
+      }
+      const occupancyRate = totalBeds > 0 ? Math.round((occupied / totalBeds) * 100) : 0;
+      return { totalBeds, occupied, available, occupancyRate };
+    }
+    const totalBeds = scopedRooms.reduce((s, r) => s + r.number_of_beds, 0);
+    const occupied = scopedRooms.reduce((s, r) => s + r.occupant_count, 0);
+    const available = scopedRooms.reduce((s, r) => s + r.available_beds, 0);
     const occupancyRate = totalBeds > 0 ? Math.round((occupied / totalBeds) * 100) : 0;
     return { totalBeds, occupied, available, occupancyRate };
-  }, [rooms]);
+  }, [scopedRooms, isManager, managerDept, personnelMap]);
 
   const roomStatus = useMemo(
     () =>
-      rooms.reduce(
+      scopedRooms.reduce(
         (summary, room) => {
           if (room.occupant_count === 0) summary.empty += 1;
           else if (room.available_beds === 0) summary.full += 1;
@@ -97,11 +132,10 @@ function DashboardContent() {
         },
         { full: 0, partial: 0, empty: 0 },
       ),
-    [rooms],
+    [scopedRooms],
   );
 
-  const isManager = auth.role === "manager";
-  const departmentLabel = deptHe(auth.department || "");
+  const departmentLabel = deptHe(managerDept);
   const viewOptions = useMemo(
     () => (isManager ? VIEW_OPTIONS.filter((option) => option.key !== "departments") : VIEW_OPTIONS),
     [isManager],
@@ -109,7 +143,7 @@ function DashboardContent() {
 
   const assignedPeople = useMemo(
     () =>
-      rooms.flatMap((room) =>
+      scopedRooms.flatMap((room) =>
         room.occupant_ids.map((personId) => {
           const person = personnelMap.get(personId);
           return {
@@ -118,7 +152,7 @@ function DashboardContent() {
           };
         }),
       ),
-    [rooms, personnelMap],
+    [scopedRooms, personnelMap],
   );
 
   const distributionItems = useMemo(() => {
@@ -142,7 +176,7 @@ function DashboardContent() {
   const assignmentGapItems = useMemo(() => {
     const counts = new Map<string, { assigned: number; waiting: number; total: number }>();
 
-    for (const person of personnel) {
+    for (const person of scopedPersonnel) {
       const key = isManager ? person.rank : person.department;
       if (!key) continue;
 
@@ -165,11 +199,26 @@ function DashboardContent() {
       }))
       .sort((a, b) => b.waiting - a.waiting || b.total - a.total)
       .slice(0, 6);
-  }, [assignedIdSet, isManager, personnel]);
+  }, [assignedIdSet, isManager, scopedPersonnel]);
 
-  const waitingTotal = useMemo(
-    () => personnel.filter((person) => !assignedIdSet.has(person.person_id)).length,
-    [assignedIdSet, personnel],
+  const waitingPersonnel = useMemo(
+    () => scopedPersonnel.filter((person) => !assignedIdSet.has(person.person_id)),
+    [assignedIdSet, scopedPersonnel],
+  );
+
+  const waitingTotal = waitingPersonnel.length;
+
+  const waitingDepartments = useMemo(
+    () => Array.from(new Set(waitingPersonnel.map((p) => p.department).filter(Boolean))),
+    [waitingPersonnel],
+  );
+  const waitingGenders = useMemo(
+    () => Array.from(new Set(waitingPersonnel.map((p) => p.gender).filter(Boolean))),
+    [waitingPersonnel],
+  );
+  const waitingRanks = useMemo(
+    () => Array.from(new Set(waitingPersonnel.map((p) => p.rank).filter(Boolean))),
+    [waitingPersonnel],
   );
 
   const capacityItems = useMemo(
@@ -177,7 +226,7 @@ function DashboardContent() {
       [...buildings]
         .sort((a, b) => b.occupancyRate - a.occupancyRate || b.totalBeds - a.totalBeds)
         .map((building) => ({
-          label: `מבנה ${buildingHe(building.name)}`,
+          label: buildingHe(building.name),
           occupied: building.occupiedBeds,
           available: building.availableBeds,
           total: building.totalBeds,
@@ -230,44 +279,17 @@ function DashboardContent() {
     };
   }, []);
 
-  async function handleAutoAssign() {
-    setAutoAssignLoading(true);
-    try {
-      const result = await autoAssignUnassigned(undefined, dataVersion);
-      if (result.failed_count > 0) {
-        const failedDepartments = Array.from(
-          new Set(
-            result.failed
-              .map((person) => person.department)
-              .filter(Boolean)
-              .map((department) => deptHe(department)),
-          ),
-        );
-        const departmentsLabel =
-          failedDepartments.length > 0
-            ? ` בזירות: ${failedDepartments.join(", ")}`
-            : "";
-        const suffix =
-          " כדי לשבץ אותם יש להוסיף חדרים מתאימים או לעדכן את מטא־דאטת החדרים המתאימים.";
-
-        if (result.assigned_count > 0) {
-          toast.warn(
-            `שובצו ${result.assigned_count} אנשים, אבל ${result.failed_count} עדיין ללא חדר תואם${departmentsLabel}.${suffix}`,
-          );
-        } else {
-          toast.warn(
-            `${result.failed_count} אנשים עדיין ללא חדר תואם${departmentsLabel}.${suffix}`,
-          );
-        }
-      } else if (result.assigned_count > 0) {
-        toast.success(result.message);
-      } else {
-        toast.info(result.message);
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "שגיאה בשיבוץ אוטומטי");
-    } finally {
-      setAutoAssignLoading(false);
+  function handleAutoAssignResult(result: { assigned: number; failed: number; message: string }) {
+    if (result.failed > 0 && result.assigned > 0) {
+      toast.warn(`שובצו ${result.assigned} אנשים, אבל ${result.failed} עדיין ללא חדר תואם.`);
+    } else if (result.failed > 0) {
+      toast.warn(`${result.failed} אנשים ללא חדר תואם.`);
+    } else if (result.assigned > 0) {
+      toast.success(result.message);
+    } else if (result.message.startsWith("שגיאה")) {
+      toast.error(result.message);
+    } else {
+      toast.info(result.message);
     }
   }
 
@@ -296,26 +318,24 @@ function DashboardContent() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {!isManager ? (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => setAutoAssignConfirmOpen(true)}
-                  disabled={autoAssignLoading || waitingTotal === 0 || rooms.length === 0}
-                  className="inline-flex items-center gap-2"
-                >
-                  <IconUsers size={15} />
-                  {autoAssignLoading ? "משבץ..." : waitingTotal > 0 ? `שיבוץ אוטומטי (${waitingTotal})` : "שיבוץ אוטומטי"}
-                </Button>
-              ) : null}
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setAutoAssignOpen(true)}
+                disabled={waitingTotal === 0 || scopedRooms.length === 0}
+                className="inline-flex items-center gap-2"
+              >
+                <IconUsers size={15} />
+                {waitingTotal > 0 ? `שיבוץ אוטומטי (${waitingTotal})` : "שיבוץ אוטומטי"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => exportToExcel(
                   "נתונים_מלאים",
-                  ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסים", "שמורות", "פנויים", "מצב", "דיירים"],
-                  rooms.map((r) => [
-                    `מבנה ${buildingHe(r.building_name)}`,
+                  ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסות", "שמורות", "פנויות", "מצב", "דיירים"],
+                  scopedRooms.map((r) => [
+                    buildingHe(r.building_name),
                     String(r.room_number),
                     rankHe(r.room_rank),
                     r.departments.map(deptHe).join(", ") || "—",
@@ -351,7 +371,7 @@ function DashboardContent() {
         />
         <StatCard
           label='סה"כ חדרים'
-          value={rooms.length}
+          value={scopedRooms.length}
           tone="neutral"
           icon={<IconDoor size={18} />}
         />
@@ -416,7 +436,7 @@ function DashboardContent() {
         )}
       </section>
 
-      {rooms.length > 0 ? (
+      {scopedRooms.length > 0 ? (
         showAnalytics ? (
           <DashboardAnalytics
             capacityTitle={isManager ? "תפוסה לפי מבנה בזירה" : "תפוסה לפי מבנה"}
@@ -442,21 +462,16 @@ function DashboardContent() {
       {addRoomOpen ? <AddRoomModal open={addRoomOpen} onClose={() => setAddRoomOpen(false)} /> : null}
       {addPersonnelOpen ? <AddPersonnelModal open={addPersonnelOpen} onClose={() => setAddPersonnelOpen(false)} /> : null}
       {swapOpen ? <SwapModal open={swapOpen} onClose={() => setSwapOpen(false)} /> : null}
-      <ConfirmationDialog
-        open={autoAssignConfirmOpen}
-        title="להפעיל שיבוץ אוטומטי?"
-        description={
-          waitingTotal > 0
-            ? `המערכת תנסה לשבץ אוטומטית ${waitingTotal} אנשי כוח אדם שעדיין לא שובצו, לפי הדרגה, המגדר והזירה של כל אחד.`
-            : "אין כרגע אנשי כוח אדם שממתינים לשיבוץ."
-        }
-        confirmLabel="הפעל שיבוץ אוטומטי"
-        confirmVariant="default"
-        onOpenChange={setAutoAssignConfirmOpen}
-        onConfirm={() => {
-          setAutoAssignConfirmOpen(false);
-          void handleAutoAssign();
-        }}
+      <AutoAssignModal
+        open={autoAssignOpen}
+        onOpenChange={setAutoAssignOpen}
+        waitingPersonnel={waitingPersonnel}
+        departments={waitingDepartments}
+        genders={waitingGenders}
+        ranks={waitingRanks}
+        dataVersion={dataVersion}
+        isManager={isManager}
+        onResult={handleAutoAssignResult}
       />
     </>
   );

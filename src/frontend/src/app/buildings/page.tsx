@@ -10,11 +10,13 @@ import { StatCard } from "@/components/stat-card";
 import { exportToExcel } from "@/lib/export";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import { Room } from "@/lib/types";
+import { isRoomVisibleToManagerWithMap, deptBedCounts } from "@/lib/room-utils";
 import { getAuthContext } from "@/lib/api";
-import { IconBed, IconBedOff, IconDoor, IconDownload, IconPercent, IconZzz } from "@/components/icons";
+import { IconBed, IconBedOff, IconDoor, IconDownload, IconPercent, IconSearch, IconZzz } from "@/components/icons";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const AddRoomModal = dynamic(
@@ -78,7 +80,7 @@ function usePageFilter() {
   const rank = searchParams.get("rank");
   const department = searchParams.get("department");
 
-  if (name) return { type: "building" as const, value: name, label: `מבנה ${buildingHe(name)}` };
+  if (name) return { type: "building" as const, value: name, label: buildingHe(name) };
   if (gender) return { type: "gender" as const, value: gender, label: genderHe(gender) };
   if (rank) return { type: "rank" as const, value: rank, label: rankHe(rank) };
   if (department) return { type: "department" as const, value: department, label: deptHe(department) };
@@ -87,15 +89,22 @@ function usePageFilter() {
 
 function BuildingContent() {
   const filter = usePageFilter();
-  const { rooms, buildings, loading, auth } = useAppData();
+  const { rooms, buildings, personnel, loading, auth } = useAppData();
   const [addRoomOpen, setAddRoomOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("room_number");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const [rankOrder, setRankOrder] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState("");
   const { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount } = useColumnFilters();
   const isManager = auth.role === "manager";
-  const departmentLabel = deptHe(auth.department || "");
+  const managerDept = auth.department || "";
+  const departmentLabel = deptHe(managerDept);
+
+  const personnelMap = useMemo(
+    () => new Map(personnel.map((p) => [p.person_id, p])),
+    [personnel],
+  );
 
   useEffect(() => {
     let active = true;
@@ -113,19 +122,29 @@ function BuildingContent() {
   }, []);
 
   const baseRooms = useMemo(() => {
+    let filtered: Room[];
     switch (filter.type) {
       case "building":
-        return rooms.filter((r) => r.building_name === filter.value);
+        filtered = rooms.filter((r) => r.building_name === filter.value);
+        break;
       case "gender":
-        return rooms.filter((r) => r.gender === filter.value);
+        filtered = rooms.filter((r) => r.gender === filter.value);
+        break;
       case "rank":
-        return rooms.filter((r) => r.room_rank === filter.value);
+        filtered = rooms.filter((r) => r.room_rank === filter.value);
+        break;
       case "department":
-        return rooms.filter((r) => r.departments.includes(filter.value));
+        filtered = rooms.filter((r) => r.departments.includes(filter.value));
+        break;
       case "all":
-        return rooms;
+        filtered = rooms;
+        break;
     }
-  }, [rooms, filter.type, filter.value]);
+    if (isManager) {
+      filtered = filtered.filter((r) => isRoomVisibleToManagerWithMap(r, managerDept, personnelMap));
+    }
+    return filtered;
+  }, [rooms, filter.type, filter.value, isManager, managerDept, personnelMap]);
 
   const filteredRooms = useMemo(() => {
     let result = baseRooms.filter((room) => {
@@ -149,6 +168,23 @@ function BuildingContent() {
       return true;
     });
 
+    const query = searchQuery.trim().toLocaleLowerCase("he");
+    if (query) {
+      result = result.filter((room) => {
+        const searchableValues = [
+          buildingHe(room.building_name),
+          String(room.room_number),
+          rankHe(room.room_rank),
+          ...room.departments.map(deptHe),
+          genderHe(room.gender),
+          roomStatusHe(room),
+          String(room.number_of_beds),
+          String(room.occupant_count),
+        ];
+        return searchableValues.some((v) => v.toLocaleLowerCase("he").includes(query));
+      });
+    }
+
     result = [...result].sort((a, b) => {
       let cmp = 0;
       if (sortKey === "building_name") {
@@ -169,7 +205,7 @@ function BuildingContent() {
     });
 
     return result;
-  }, [baseRooms, filters, rankOrder, sortKey, sortDir]);
+  }, [baseRooms, filters, rankOrder, sortKey, sortDir, searchQuery]);
 
   const selectedRoom = useMemo(() => {
     if (!selectedRoomKey) return null;
@@ -184,6 +220,21 @@ function BuildingContent() {
       setSortDir("asc");
     }
   }
+
+  const { totalBeds, occupiedBeds, occupancyRate } = useMemo(() => {
+    if (isManager) {
+      let total = 0, occ = 0;
+      for (const r of filteredRooms) {
+        const c = deptBedCounts(r, managerDept, personnelMap);
+        total += c.deptTotal;
+        occ += c.deptOccupied;
+      }
+      return { totalBeds: total, occupiedBeds: occ, occupancyRate: total > 0 ? Math.round((occ / total) * 100) : 0 };
+    }
+    const total = filteredRooms.reduce((s, r) => s + r.number_of_beds, 0);
+    const occ = filteredRooms.reduce((s, r) => s + r.occupant_count, 0);
+    return { totalBeds: total, occupiedBeds: occ, occupancyRate: total > 0 ? Math.round((occ / total) * 100) : 0 };
+  }, [filteredRooms, isManager, managerDept, personnelMap]);
 
   if (loading) {
     return (
@@ -203,21 +254,17 @@ function BuildingContent() {
         <Breadcrumb items={[{ label: "לוח בקרה", href: "/" }, { label: filter.label }]} />
         <Card className="page-hero overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-12 text-center">
           <p className="text-[16px] font-semibold text-foreground">
-            מבנה &quot;{buildingHe(filter.value)}&quot; לא נמצא
+            &quot;{buildingHe(filter.value)}&quot; לא נמצא
           </p>
         </Card>
       </div>
     );
   }
 
-  const totalBeds = filteredRooms.reduce((sum, room) => sum + room.number_of_beds, 0);
-  const occupiedBeds = filteredRooms.reduce((sum, room) => sum + room.occupant_count, 0);
-  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-
   const uniqueValues: Record<string, { value: string; label: string }[]> = {
     building_name: [...new Set(baseRooms.map((r) => r.building_name))]
       .sort((a, b) => buildingHe(a).localeCompare(buildingHe(b), "he"))
-      .map((v) => ({ value: v, label: `מבנה ${buildingHe(v)}` })),
+      .map((v) => ({ value: v, label: buildingHe(v) })),
     room_number: [...new Set(baseRooms.map((r) => String(r.room_number)))].sort((a, b) => Number(a) - Number(b)).map((v) => ({ value: v, label: v })),
     room_rank: [...new Set(baseRooms.map((r) => r.room_rank))].map((v) => ({ value: v, label: rankHe(v) })),
     department: [...new Set(baseRooms.flatMap((r) => r.departments))]
@@ -235,13 +282,13 @@ function BuildingContent() {
 
   const breadcrumbLabel =
     filter.type === "building"
-      ? `מבנה ${buildingHe(filter.value)}`
+      ? buildingHe(filter.value)
       : filter.type === "all" && isManager
         ? `חדרי ${departmentLabel}`
         : filter.label;
   const exportName =
     filter.type === "building"
-      ? `מבנה_${buildingHe(filter.value)}_חדרים`
+      ? `${buildingHe(filter.value)}_חדרים`
       : filter.type === "all" && isManager
         ? `חדרי_${departmentLabel}`
         : `${filter.label}_חדרים`;
@@ -255,47 +302,67 @@ function BuildingContent() {
       <Breadcrumb items={[{ label: "לוח בקרה", href: "/" }, { label: breadcrumbLabel }]} />
 
       <Card className="page-hero mb-6 overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-7">
-        <div className="flex flex-col gap-3 px-0 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">{breadcrumbLabel}</h2>
+        <div className="flex flex-col gap-4 px-0">
+          <div className={isManager ? "flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(360px,520px)_auto] lg:items-center" : "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"}>
+            <div className={isManager ? "shrink-0 lg:justify-self-start" : "space-y-1"}>
+              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">{breadcrumbLabel}</h2>
+            </div>
+
             {isManager ? (
-              <p className="text-sm leading-6 text-muted-foreground">
-                מוצגים רק החדרים הרלוונטיים לזירת {departmentLabel}.
-              </p>
+              <div className="relative w-full lg:justify-self-center">
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                  <IconSearch size={14} />
+                </div>
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="חיפוש לפי מבנה, חדר, דרגה או מגדר"
+                  className="h-9 pr-9"
+                />
+              </div>
             ) : null}
+
+            <div className={isManager ? "flex lg:justify-self-end" : undefined}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => exportToExcel(
+                  exportName,
+                  [showBuildingCol ? "מבנה" : null, "חדר", "דרגה", showDepartmentCol ? "זירות" : null, "מגדר", "מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
+                  filteredRooms.map((r) => [
+                    ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
+                    String(r.room_number),
+                    rankHe(r.room_rank),
+                    ...(showDepartmentCol ? [r.departments.map(deptHe).join(", ") || "—"] : []),
+                    genderHe(r.gender),
+                    String(r.number_of_beds),
+                    String(r.occupant_count),
+                    String(r.available_beds),
+                    roomStatusHe(r),
+                  ]),
+                )}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 text-[12px]"
+              >
+                <IconDownload size={14} />
+                ייצוא לאקסל
+              </Button>
+            </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => exportToExcel(
-              exportName,
-              [showBuildingCol ? "מבנה" : null, "חדר", "דרגה", showDepartmentCol ? "זירות" : null, "מגדר", "מיטות", "תפוסים", "פנויים", "מצב"].filter(Boolean) as string[],
-              filteredRooms.map((r) => [
-                ...(showBuildingCol ? [`מבנה ${buildingHe(r.building_name)}`] : []),
-                String(r.room_number),
-                rankHe(r.room_rank),
-                ...(showDepartmentCol ? [r.departments.map(deptHe).join(", ") || "—"] : []),
-                genderHe(r.gender),
-                String(r.number_of_beds),
-                String(r.occupant_count),
-                String(r.available_beds),
-                roomStatusHe(r),
-              ]),
-            )}
-            className="inline-flex items-center gap-1.5 text-[12px]"
-          >
-            <IconDownload size={14} />
-            ייצוא לאקסל
-          </Button>
+
+          {isManager ? (
+            <p className="text-sm leading-6 text-muted-foreground">
+              מוצגים רק החדרים הרלוונטיים לזירת {departmentLabel}.
+            </p>
+          ) : null}
         </div>
       </Card>
 
       <section className="mb-6 grid grid-cols-5 gap-5">
         <StatCard label="חדרים" value={baseRooms.length} icon={<IconDoor size={17} />} />
         <StatCard label='סה"כ מיטות' value={totalBeds} icon={<IconBed size={17} />} />
-        <StatCard label="תפוסים" value={occupiedBeds} icon={<IconBedOff size={17} />} />
-        <StatCard label="פנויים" value={Math.max(totalBeds - occupiedBeds, 0)} tone="accent" icon={<IconBed size={17} />} />
+        <StatCard label="תפוסות" value={occupiedBeds} icon={<IconBedOff size={17} />} />
+        <StatCard label="פנויות" value={Math.max(totalBeds - occupiedBeds, 0)} tone="accent" icon={<IconBed size={17} />} />
         <StatCard
           label="שיעור תפוסה"
           value={`${occupancyRate}%`}
@@ -304,7 +371,7 @@ function BuildingContent() {
         />
       </section>
 
-      {activeCount > 0 ? (
+      {activeCount > 0 || searchQuery.trim() ? (
         <div className="mb-3 flex items-center gap-3 px-1">
           <span className="text-[12px] text-muted-foreground">
             {filteredRooms.length} מתוך {baseRooms.length} חדרים
@@ -314,7 +381,10 @@ function BuildingContent() {
             variant="link"
             size="xs"
             className="text-destructive hover:text-destructive"
-            onClick={clearAll}
+            onClick={() => {
+              clearAll();
+              setSearchQuery("");
+            }}
           >
             נקה סינון
           </Button>
@@ -322,6 +392,16 @@ function BuildingContent() {
       ) : null}
 
       <Card className="overflow-visible border-border/70 bg-card/90 p-0">
+        {auth.role === "admin" ? (
+          <Button
+            variant="ghost"
+            className="w-full rounded-none border-b border-border/70 py-3 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+            onClick={() => setAddRoomOpen(true)}
+          >
+            <span className="text-[16px] leading-none">+</span>
+            הוסף חדר
+          </Button>
+        ) : null}
         <div className="overflow-x-auto">
           <Table className="text-[13px]">
             <TableHeader>
@@ -396,16 +476,6 @@ function BuildingContent() {
             </TableBody>
           </Table>
         </div>
-        {auth.role === "admin" ? (
-          <Button
-            variant="ghost"
-            className="w-full rounded-none border-t border-border/70 py-3 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
-            onClick={() => setAddRoomOpen(true)}
-          >
-            <span className="text-[16px] leading-none">+</span>
-            הוסף חדר
-          </Button>
-        ) : null}
       </Card>
 
       {addRoomOpen ? (
@@ -438,7 +508,7 @@ function RoomRow({ room, showBuilding, onClick }: { room: Room; showBuilding: bo
       aria-label={`פתח פרטי חדר ${room.room_number}`}
       className="cursor-pointer transition-colors hover:bg-accent/[0.45]"
     >
-      {showBuilding && <TableCell className="px-4 py-3 font-semibold text-foreground">מבנה {buildingHe(room.building_name)}</TableCell>}
+      {showBuilding && <TableCell className="px-4 py-3 font-semibold text-foreground">{buildingHe(room.building_name)}</TableCell>}
       <TableCell className="px-4 py-3 font-semibold text-foreground">{room.room_number}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{rankHe(room.room_rank)}</TableCell>
       {showDepartmentCol ? (

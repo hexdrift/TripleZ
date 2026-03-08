@@ -20,7 +20,7 @@ from config import (
     normalize_name,
     normalize_rank,
 )
-from src.backend.auth_session import AuthSession, require_admin, require_admin_or_api_key
+from src.backend.auth_session import AuthSession, require_admin, require_admin_or_api_key, require_authenticated
 from src.backend.dependencies import bump_version, core, get_data_version, mutation_lock, store
 from src.backend.runtime_meta import (
     append_audit_event,
@@ -947,20 +947,34 @@ def set_room_department(
 @router.post("/auto_assign")
 def auto_assign(
     req: AutoAssignRequest,
-    session: AuthSession = Depends(require_admin),
+    session: AuthSession = Depends(require_authenticated),
 ) -> dict:
     """Automatically assign all currently unassigned personnel.
 
+    Admins can assign any department; managers are scoped to their own department.
+
     Args:
-        req: Optional department scope for the run.
+        req: Optional filters (department, gender, rank, person_ids).
 
     Returns:
         Structured report of assignments, already-assigned people, and failures.
     """
+    # Managers are forced to their own department
+    department = req.department
+    if session.role == "manager":
+        department = session.department
+    elif session.role != "admin":
+        raise HTTPException(status_code=403, detail="נדרשות הרשאות מתאימות")
+
     try:
         with mutation_lock():
             _assert_expected_version(req.expected_version)
-            result = core.assign_all_unassigned(department=req.department)
+            result = core.assign_all_unassigned(
+                department=department,
+                gender=req.gender,
+                rank=req.rank,
+                person_ids=req.person_ids,
+            )
             if result["assigned_count"] > 0:
                 bump_version()
         append_audit_event(
@@ -969,7 +983,7 @@ def auto_assign(
             actor_department=_actor_department(session),
             action="auto_assign",
             entity_type="rooms",
-            entity_id=req.department or "all",
+            entity_id=department or "all",
             message="שיבוץ אוטומטי הורץ",
             details=result,
         )

@@ -34,11 +34,12 @@ import { VisuallyHidden } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "לוח בקרה", icon: IconLayoutDashboard, adminOnly: false },
-  { href: "/personnel", label: "כוח אדם", icon: IconUsers, adminOnly: false },
-  { href: "/rooms", label: "חדרים", icon: IconBed, adminOnly: true },
-  { href: "/audit", label: "יומן פעולות", icon: IconClipboardList, adminOnly: true },
-  { href: "/settings", label: "הגדרות", icon: IconSettings, adminOnly: true },
+  { href: "/", label: "לוח בקרה", icon: IconLayoutDashboard, role: "all" as const },
+  { href: "/personnel", label: "כוח אדם", icon: IconUsers, role: "all" as const },
+  { href: "/buildings", label: "חדרים", icon: IconBed, role: "manager" as const },
+  { href: "/rooms", label: "חדרים", icon: IconBed, role: "admin" as const },
+  { href: "/audit", label: "יומן פעולות", icon: IconClipboardList, role: "admin" as const },
+  { href: "/settings", label: "הגדרות", icon: IconSettings, role: "admin" as const },
 ];
 
 interface SidebarProps {
@@ -100,7 +101,7 @@ export function Sidebar({ buildings, viewMode, rooms, collapsed, onToggleCollaps
         key: b.name,
         href: `/buildings?name=${encodeURIComponent(b.name)}`,
         icon: <IconBuilding size={15} />,
-        label: `מבנה ${buildingHe(b.name)}`,
+        label: buildingHe(b.name),
         pct: Math.round(b.occupancyRate * 100),
       }));
     }
@@ -498,7 +499,7 @@ function SidebarPane({
 }
 
 function navItemsForRole(role: "admin" | "manager") {
-  return navItems.filter((item) => !item.adminOnly || role === "admin");
+  return navItems.filter((item) => item.role === "all" || item.role === role);
 }
 
 function normalizeSidebarHref(href: string) {

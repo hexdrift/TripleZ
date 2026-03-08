@@ -29,7 +29,7 @@ export function BuildingCard({ building }: { building: BuildingSummary }) {
               </div>
               <div>
                 <h3 className="text-[20px] font-bold leading-tight tracking-[-0.03em] text-foreground">
-                  מבנה {buildingHe(building.name)}
+                  {buildingHe(building.name)}
                 </h3>
                 <p className="text-[12px] text-muted-foreground">{building.totalRooms} חדרים פעילים</p>
               </div>
@@ -53,8 +53,8 @@ export function BuildingCard({ building }: { building: BuildingSummary }) {
 
           <div className="grid grid-cols-3 gap-2">
             <MiniStat icon={<IconBed size={13} />} label="מיטות" value={building.totalBeds} />
-            <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={building.occupiedBeds} tone="warning" />
-            <MiniStat icon={<IconBed size={13} />} label="פנויים" value={building.availableBeds} tone="accent" />
+            <MiniStat icon={<IconBedOff size={13} />} label="תפוסות" value={building.occupiedBeds} tone="warning" />
+            <MiniStat icon={<IconBed size={13} />} label="פנויות" value={building.availableBeds} tone="accent" />
           </div>
         </CardContent>
       </Card>

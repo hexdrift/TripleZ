@@ -344,13 +344,24 @@ export async function setRoomDepartment(
   });
 }
 
-export async function autoAssignUnassigned(department?: string | null, expectedVersion?: number): Promise<AutoAssignResult> {
+export interface AutoAssignFilters {
+  department?: string | null;
+  gender?: string | null;
+  rank?: string | null;
+  person_ids?: string[] | null;
+  expectedVersion?: number;
+}
+
+export async function autoAssignUnassigned(filters: AutoAssignFilters = {}): Promise<AutoAssignResult> {
+  const body: Record<string, unknown> = {};
+  if (filters.department) body.department = filters.department;
+  if (filters.gender) body.gender = filters.gender;
+  if (filters.rank) body.rank = filters.rank;
+  if (filters.person_ids?.length) body.person_ids = filters.person_ids;
+  if (filters.expectedVersion !== undefined) body.expected_version = filters.expectedVersion;
   return fetchJSON<AutoAssignResult>("/admin/auto_assign", {
     method: "POST",
-    body: JSON.stringify({
-      ...(department ? { department } : {}),
-      ...(expectedVersion !== undefined ? { expected_version: expectedVersion } : {}),
-    }),
+    body: JSON.stringify(body),
   });
 }
 
