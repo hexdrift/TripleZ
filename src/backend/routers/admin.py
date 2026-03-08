@@ -1167,10 +1167,11 @@ def release_saved_assignment(
 
 @router.post("/reset-all", response_model=SimpleOK)
 def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
-    """Wipe all rooms and personnel data."""
+    """Wipe all rooms, personnel, saved assignments, and audit log."""
     store.delete_all("rooms")
     store.delete_all("personnel")
     store.delete_all("saved_assignments")
+    store.delete_all("audit_log")
     bump_version()
     append_audit_event(
         store,
@@ -1179,7 +1180,7 @@ def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
         action="reset_all",
         entity_type="system",
         entity_id="all",
-        message="כל הנתונים אופסו",
+        message="כל הנתונים אופסו (כולל יומן ביקורת)",
     )
-    logger.info("All rooms and personnel data reset by %s", session.role)
+    logger.info("All data (rooms, personnel, saved assignments, audit log) reset by %s", session.role)
     return SimpleOK(ok=True)
