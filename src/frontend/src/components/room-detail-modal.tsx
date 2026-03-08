@@ -11,7 +11,6 @@ import {
   movePerson,
   updateRoomMetadata,
   getAuthContext,
-  releaseSavedAssignment,
 } from "@/lib/api";
 import { useAppData } from "./app-shell";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
@@ -108,14 +107,6 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     setView(auth.role === "admin" ? "chooser" : "assignments");
   }, [auth.role, room]);
 
-  // Reset selection if SSE update makes the selected bed index out of bounds
-  useEffect(() => {
-    if (selectedBed !== null && liveRoom && selectedBed >= liveRoom.number_of_beds) {
-      setSelectedBed(null);
-      setView(auth.role === "admin" ? "chooser" : "assignments");
-    }
-  }, [liveRoom, selectedBed, auth.role]);
-
   const handleBedClick = useCallback((bedIdx: number) => {
     setDirection(1);
     setSelectedBed(bedIdx);
@@ -145,24 +136,17 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
       ? Math.ceil(total / 2)
       : Math.min(6, Math.ceil(total / Math.ceil(total / 6)));
 
-  const reservedPersons = liveRoom.reserved_persons || [];
   const bedOccupants = Array.from({ length: total }, (_, i) => {
     if (i < liveRoom.occupant_ids.length) {
       const personId = liveRoom.occupant_ids[i];
-      return { personId, name: liveRoom.occupant_names?.[personId] || "", reserved: false as const };
-    }
-    const reservedIdx = i - liveRoom.occupant_ids.length;
-    if (reservedIdx >= 0 && reservedIdx < reservedPersons.length) {
-      const rp = reservedPersons[reservedIdx];
-      return { personId: rp.person_id, name: rp.full_name, reserved: true as const, department: rp.department, rank: rp.rank, savedAt: rp.saved_at };
+      return { personId, name: liveRoom.occupant_names?.[personId] || "" };
     }
     return null;
   });
 
-  const selectedBedData = selectedBed !== null ? bedOccupants[selectedBed] : null;
-  const selectedOccupant = selectedBedData && !selectedBedData.reserved ? selectedBedData : null;
-  const selectedReserved = selectedBedData?.reserved ? selectedBedData : null;
-  const selectedBedIsEmpty = selectedBed !== null && !selectedBedData;
+  const selectedOccupant =
+    selectedBed !== null ? bedOccupants[selectedBed] : null;
+  const selectedBedIsEmpty = selectedBed !== null && !bedOccupants[selectedBed];
   const isAdmin = auth.role === "admin";
   const showBack = view === "detail" || (isAdmin && view !== "chooser");
 
@@ -170,8 +154,6 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     view === "detail" && selectedBed !== null
       ? selectedOccupant
         ? selectedOccupant.name || `מיטה ${selectedBed + 1}`
-        : selectedReserved
-        ? `מיטה ${selectedBed + 1} — שמורה`
         : `מיטה ${selectedBed + 1} — שיבוץ`
       : view === "metadata"
       ? `עריכת חדר ${liveRoom.room_number}`
@@ -302,15 +284,12 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                                 <ClickableBed
                                   key={bedIdx}
                                   index={bedIdx}
-                                  occupied={!!occ && !occ.reserved}
-                                  reserved={!!occ?.reserved}
+                                  occupied={!!occ}
                                   selected={false}
                                   deptColor={deptColor}
                                   label={
                                     occ
-                                      ? occ.reserved
-                                        ? occ.name || "שמורה"
-                                        : occ.name || occ.personId.slice(-4)
+                                      ? occ.name || occ.personId.slice(-4)
                                       : undefined
                                   }
                                   onClick={() => handleBedClick(bedIdx)}
@@ -329,9 +308,6 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                         liveRoom.departments.map(deptHe).join(", ") || "—"
                       }
                     />
-                    {reservedPersons.length > 0 && (
-                      <Legend color="#F59E0B" label="שמורה" />
-                    )}
                     <Legend color="var(--surface-3)" label="פנויה" dashed />
                   </div>
                 </section>
@@ -364,15 +340,6 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                   <OccupantDetail
                     personId={selectedOccupant.personId}
                     name={selectedOccupant.name}
-                    bedIndex={selectedBed! + 1}
-                  />
-                ) : selectedReserved ? (
-                  <ReservedBedDetail
-                    personId={selectedReserved.personId}
-                    name={selectedReserved.name}
-                    department={selectedReserved.department}
-                    rank={selectedReserved.rank}
-                    savedAt={selectedReserved.savedAt}
                     bedIndex={selectedBed! + 1}
                   />
                 ) : selectedBedIsEmpty ? (
@@ -622,7 +589,6 @@ function RoomMetadataEditor({ room }: { room: Room }) {
 function ClickableBed({
   index,
   occupied,
-  reserved = false,
   selected,
   deptColor,
   label,
@@ -630,27 +596,14 @@ function ClickableBed({
 }: {
   index: number;
   occupied: boolean;
-  reserved?: boolean;
   selected: boolean;
   deptColor: typeof DEFAULT_DEPT_COLOR;
   label?: string;
   onClick: () => void;
 }) {
-  const fill = reserved
-    ? "rgba(245, 158, 11, 0.15)"
-    : occupied
-    ? deptColor.bg
-    : "var(--surface-1)";
-  const stroke = reserved
-    ? "#F59E0B"
-    : occupied
-    ? deptColor.strong
-    : "var(--border)";
-  const hoverBg = reserved
-    ? "rgba(245, 158, 11, 0.22)"
-    : occupied
-    ? deptColor.bg
-    : "var(--color-muted)";
+  const fill = occupied ? deptColor.bg : "var(--surface-1)";
+  const stroke = occupied ? deptColor.strong : "var(--border)";
+  const hoverBg = occupied ? deptColor.bg : "var(--color-muted)";
 
   return (
     <button
@@ -679,150 +632,49 @@ function ClickableBed({
         if (!selected) e.currentTarget.style.backgroundColor = "";
       }}
       title={
-        reserved
-          ? `מיטה ${index + 1} - שמורה`
-          : occupied
-          ? `מיטה ${index + 1} - תפוסה`
-          : `מיטה ${index + 1} - פנויה`
+        occupied ? `מיטה ${index + 1} - תפוסה` : `מיטה ${index + 1} - פנויה`
       }
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 200 200"
-        className={cn("h-auto w-full", (occupied || reserved) ? "opacity-100" : "opacity-40")}
-        style={{ color: reserved ? "#F59E0B" : occupied ? stroke : undefined }}
+        className={cn("h-auto w-full", occupied ? "opacity-100" : "opacity-40")}
       >
-        <g fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
+        <g
+          fill={fill}
+          stroke={stroke}
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="42" y="20" width="116" height="24" rx="6" />
           <rect x="50" y="36" width="100" height="144" rx="8" />
           <rect x="65" y="48" width="70" height="32" rx="10" />
           <path d="M 46 95 L 154 95 L 154 172 C 154 179.7 147.7 186 140 186 L 60 186 C 52.3 186 46 179.7 46 172 Z" />
           <rect x="46" y="85" width="108" height="20" rx="6" />
         </g>
-        <g fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+        <g
+          fill="none"
+          stroke={stroke}
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M 78 64 Q 100 68 122 64" />
           <path d="M 75 120 Q 85 145 75 170" />
           <path d="M 125 120 Q 115 145 125 170" />
         </g>
-        {reserved && (
-          <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M 86 97 V 85 A 14 14 0 0 1 114 85 V 97" strokeWidth="3" />
-            <rect x="76" y="97" width="48" height="34" rx="6" strokeWidth="3.5" />
-            <circle cx="100" cy="110" r="3" strokeWidth="2.5" />
-            <path d="M 100 113 L 96 121 H 104 Z" strokeWidth="2.5" />
-          </g>
-        )}
       </svg>
       <span
         className={cn(
           "mt-0.5 max-w-full truncate px-0.5 text-[9px] font-bold",
-          !occupied && !reserved && "text-muted-foreground",
+          !occupied && "text-muted-foreground",
         )}
-        style={
-          reserved
-            ? { color: "#F59E0B" }
-            : occupied
-            ? { color: deptColor.strong }
-            : undefined
-        }
+        style={occupied ? { color: deptColor.strong } : undefined}
       >
         {label || `מיטה ${index + 1}`}
       </span>
     </button>
-  );
-}
-
-function ReservedBedDetail({
-  personId,
-  name,
-  department,
-  rank,
-  savedAt,
-  bedIndex,
-}: {
-  personId: string;
-  name: string;
-  department: string;
-  rank: string;
-  savedAt: string;
-  bedIndex: number;
-}) {
-  const { auth } = useAppData();
-  const [loading, setLoading] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  const formattedDate = savedAt
-    ? new Date(savedAt).toLocaleDateString("he-IL", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : "";
-
-  async function handleRelease() {
-    setLoading(true);
-    try {
-      await releaseSavedAssignment(personId);
-      toast.success("שמירת המיטה שוחררה");
-    } catch {
-      toast.error("שגיאה בשחרור השמירה");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Card className="space-y-3 p-4 border-amber-300/50 bg-amber-50/30 dark:bg-amber-950/20">
-      <div className="flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-        </svg>
-        <span className="text-sm font-semibold" style={{ color: "#D97706" }}>
-          מיטה {bedIndex} — שמורה
-        </span>
-      </div>
-      <Separator />
-      <div className="grid grid-cols-2 gap-y-2 text-xs">
-        <span className="text-muted-foreground">שם</span>
-        <span className="font-medium">{name || "—"}</span>
-        <span className="text-muted-foreground">זירה</span>
-        <span className="font-medium">{department || "—"}</span>
-        <span className="text-muted-foreground">דרגה</span>
-        <span className="font-medium">{rank || "—"}</span>
-        {formattedDate && (
-          <>
-            <span className="text-muted-foreground">נשמר בתאריך</span>
-            <span className="font-medium">{formattedDate}</span>
-          </>
-        )}
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        מיטה זו שמורה עבור אדם זה. כשיופיע בעדכון כוח אדם הבא, הוא ישובץ חזרה אוטומטית.
-      </p>
-      {auth.role === "admin" && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full border-amber-400/50 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
-          disabled={loading}
-          onClick={() => setConfirmOpen(true)}
-        >
-          שחרר שמירה
-        </Button>
-      )}
-      <ConfirmationDialog
-        open={confirmOpen}
-        title="לשחרר שמירת מיטה?"
-        description={`המיטה תשוחרר ו${name || personId} לא ישובץ אוטומטית בעדכון הבא.`}
-        confirmLabel="שחרר"
-        onOpenChange={setConfirmOpen}
-        onConfirm={() => {
-          setConfirmOpen(false);
-          handleRelease();
-        }}
-      />
-    </Card>
   );
 }
 

@@ -6,28 +6,28 @@ import { useAppData } from "@/components/app-shell";
 import { toast } from "react-toastify";
 import {
   AppSettings,
-  checkSettingsImpact,
   getSettings,
   getSetupPackage,
   IntegrityReport,
   importSetupPackage,
   resetAll,
+  runPersonnelSyncNow,
   SetupPackage,
   updateSettings,
 } from "@/lib/api";
-import { downloadBlob, exportToExcel } from "@/lib/export";
+import { downloadBlob } from "@/lib/export";
 import {
   IconAlertCircle,
   IconArrowDown,
   IconArrowUp,
   IconCheck,
   IconChevronDown,
-  IconCopy,
   IconDownload,
   IconEye,
   IconEyeOff,
   IconLock,
   IconPlus,
+  IconRefresh,
   IconTrash,
   IconUpload,
   IconUsers,
@@ -60,13 +60,11 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingPersonnel, setLoadingPersonnel] = useState(false);
   const [importing, setImporting] = useState(false);
   const [exportingSetup, setExportingSetup] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [impactDetails, setImpactDetails] = useState<string[]>([]);
-  const [showImpactConfirm, setShowImpactConfirm] = useState(false);
-  const pendingImpactRef = useRef<{ personnel: Record<string, unknown>[]; rooms: Record<string, unknown>[] } | null>(null);
   const settingsImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -123,32 +121,6 @@ function SettingsContent() {
     setSaving(true);
 
     try {
-      const impact = await checkSettingsImpact(normalized);
-      if (impact.has_impact) {
-        setImpactDetails(impact.details);
-        pendingImpactRef.current = {
-          personnel: impact.affected_personnel,
-          rooms: impact.affected_rooms,
-        };
-        setShowImpactConfirm(true);
-        setSaving(false);
-        return;
-      }
-      pendingImpactRef.current = null;
-      await doSave(normalized);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "שגיאה בשמירת הגדרות";
-      setError(message);
-      toast.error("שגיאה בשמירת הגדרות");
-      setSaving(false);
-    }
-  }
-
-  async function doSave(normalized: AppSettings) {
-    setSaving(true);
-    const impact = pendingImpactRef.current;
-    pendingImpactRef.current = null;
-    try {
       const updated = await updateSettings(normalized);
       updateLocalSettings(updated);
       await refreshPersonnel(true);
@@ -156,7 +128,6 @@ function SettingsContent() {
       setSaved(true);
       toast.success("ההגדרות נשמרו");
       window.setTimeout(() => setSaved(false), 2000);
-      if (impact) downloadImpactExcel(impact);
     } catch (e) {
       const message = e instanceof Error ? e.message : "שגיאה בשמירת הגדרות";
       setError(message);
@@ -216,6 +187,27 @@ function SettingsContent() {
       toast.error("שגיאה בייצוא חבילה מלאה");
     } finally {
       setExportingSetup(false);
+    }
+  }
+
+  async function handleLoadPersonnel() {
+    setLoadingPersonnel(true);
+    try {
+      const updated = await updateSettings({
+        personnel_url: currentSettings.personnel_url.trim(),
+        personnel_sync_paused: currentSettings.personnel_sync_paused,
+      });
+      updateLocalSettings(updated);
+      const res = await runPersonnelSyncNow();
+      updateLocalSettings({ ...updated, sync_status: res.sync_status });
+      await refreshPersonnel(true);
+      showIntegrityReport(res.integrity_report);
+      toast.success(`נטענו ${res.count} אנשי כוח אדם`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "שגיאה בטעינת כוח אדם";
+      toast.error(message);
+    } finally {
+      setLoadingPersonnel(false);
     }
   }
 
@@ -337,7 +329,7 @@ function SettingsContent() {
               className="gap-2 text-[13px] data-[state=active]:font-bold"
             >
               <IconUpload size={15} />
-              אינטגרציה
+              כוח אדם
             </TabsTrigger>
             <TabsTrigger
               value="lists"
@@ -358,62 +350,36 @@ function SettingsContent() {
           <TabsContent value="personnel" className="space-y-6">
             <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
               <CardContent className="space-y-4 pt-6">
-                <h3 className="text-[15px] font-semibold text-foreground">מפתח API</h3>
+                <div className="space-y-1">
+                  <h3 className="text-[15px] font-semibold text-foreground">טעינת כוח אדם</h3>
+                </div>
 
-                <PasswordField
-                  value={settings.api_key}
-                  onChange={(e) =>
-                    updateLocalSettings({
-                      ...currentSettings,
-                      api_key: e.target.value,
-                    })
-                  }
-                  dir="ltr"
-                />
-
-                <ApiUsageGuide />
-              </CardContent>
-            </Card>
-
-            <Card className="overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
-              <CardContent className="space-y-4 pt-6">
-                <h3 className="text-[15px] font-semibold text-foreground">שמירת מיטות</h3>
-                <p className="text-xs text-muted-foreground">
-                  כאשר אדם מוסר משיבוץ בעקבות עדכון כוח אדם, המיטה שלו נשמרת. כשהוא חוזר בעדכון הבא, הוא מוחזר אוטומטית למיטה המקורית.
-                </p>
-
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">מדיניות שמירה</Label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateLocalSettings({ ...currentSettings, bed_reservation_policy: "reserve" })}
-                        className={cn(
-                          "flex-1 rounded-lg border px-3 py-2 text-xs transition-colors cursor-pointer",
-                          settings.bed_reservation_policy === "reserve"
-                            ? "border-primary bg-primary/10 text-primary font-semibold"
-                            : "border-border/60 bg-background/50 text-muted-foreground hover:bg-accent/50",
-                        )}
-                      >
-                        <span className="block font-medium">שמירה</span>
-                        <span className="block mt-0.5 text-[10px] opacity-70">המיטה חסומה לאחרים</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => updateLocalSettings({ ...currentSettings, bed_reservation_policy: "best_effort" })}
-                        className={cn(
-                          "flex-1 rounded-lg border px-3 py-2 text-xs transition-colors cursor-pointer",
-                          settings.bed_reservation_policy === "best_effort"
-                            ? "border-primary bg-primary/10 text-primary font-semibold"
-                            : "border-border/60 bg-background/50 text-muted-foreground hover:bg-accent/50",
-                        )}
-                      >
-                        <span className="block font-medium">לא שמורה</span>
-                        <span className="block mt-0.5 text-[10px] opacity-70">המיטה פנויה, חזרה רק אם יש מקום</span>
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <Input
+                    type="url"
+                    value={settings.personnel_url}
+                    onChange={(e) =>
+                      updateLocalSettings({
+                        ...currentSettings,
+                        personnel_url: e.target.value,
+                      })
+                    }
+                    placeholder="https://example.com/personnel.xlsx"
+                    className="flex-1"
+                    dir="ltr"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleLoadPersonnel()}
+                    disabled={
+                      loadingPersonnel || !settings.personnel_url.trim()
+                    }
+                    className="shrink-0"
+                  >
+                    <IconRefresh size={14} />
+                    {loadingPersonnel ? "מסנכרן..." : "סנכרון עכשיו"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -517,117 +483,7 @@ function SettingsContent() {
         confirmLabel="אפס הכל"
         onConfirm={handleResetAll}
       />
-
-      <ConfirmationDialog
-        open={showImpactConfirm}
-        onOpenChange={setShowImpactConfirm}
-        title="שינוי הגדרות עם השפעה על נתונים"
-        description={impactDetails.join("\n")}
-        confirmLabel="אני מבין, המשך"
-        onConfirm={() => {
-          setShowImpactConfirm(false);
-          void doSave(normalizeLocalSettings(currentSettings));
-        }}
-      />
     </motion.div>
-  );
-}
-
-function ApiUsageGuide() {
-  const [open, setOpen] = useState(false);
-  const codeSnippet = `curl -X POST http://localhost:8000/api/admin/load_personnel \\
-  -H "Content-Type: application/json" \\
-  -H "X-API-Key: <your-api-key>" \\
-  -d '{
-  "personnel": [
-    {
-      "person_id": "123",
-      "name": "ישראל ישראלי",
-      "department": "תפעול",
-      "gender": "בנים",
-      "rank": "זוטר"
-    }
-  ]
-}'`;
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer transition-colors hover:text-foreground"
-      >
-        <motion.div
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <IconChevronDown size={14} />
-        </motion.div>
-        מידע לחיבור מערכת חיצונית
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.14, ease: "easeOut" }}
-            style={{ overflow: "hidden" }}
-          >
-            <div className="mt-3 space-y-3 rounded-xl border border-border/60 bg-muted/30 p-4">
-              <p className="text-xs text-muted-foreground">
-                מערכת חיצונית יכולה לשלוח רשימת כוח אדם עדכנית באמצעות בקשת POST עם הכותרת <code className="rounded bg-muted px-1 font-mono text-[11px]">X-API-Key</code>.
-                כל שליחה מחליפה את רשימת כוח האדם הקיימת.
-              </p>
-              <CodeBlock code={codeSnippet} />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function CodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-
-  function handleCopy() {
-    void copyToClipboard(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="relative rounded-lg border border-border/50 bg-zinc-950 dark:bg-zinc-900">
-      <div
-        className="flex items-center justify-between border-b border-white/[0.06] px-3 py-1.5"
-      >
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] text-zinc-400 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 cursor-pointer"
-        >
-          {copied ? (
-            <>
-              <IconCheck size={12} />
-              <span>הועתק</span>
-            </>
-          ) : (
-            <>
-              <IconCopy size={12} />
-              <span>העתק</span>
-            </>
-          )}
-        </button>
-        <span className="text-[10px] font-mono text-zinc-500">bash</span>
-      </div>
-      <pre
-        className="overflow-x-auto p-3 text-[11px] leading-relaxed font-mono text-zinc-300"
-        dir="ltr"
-      >
-        {code}
-      </pre>
-    </div>
   );
 }
 
@@ -991,52 +847,6 @@ function isSetupPackage(value: unknown): value is SetupPackage {
     Array.isArray(candidate.rooms) &&
     Array.isArray(candidate.personnel)
   );
-}
-
-async function copyToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch {/* fall through to legacy */}
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  ta.style.position = "fixed";
-  ta.style.opacity = "0";
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand("copy");
-  document.body.removeChild(ta);
-}
-
-function downloadImpactExcel(impact: { personnel: Record<string, unknown>[]; rooms: Record<string, unknown>[] }) {
-  const ts = new Date().toISOString().slice(0, 10);
-  if (impact.personnel.length > 0) {
-    void exportToExcel(
-      `כוח_אדם_שנמחק_${ts}`,
-      ["מזהה", "שם מלא", "זירה", "מגדר", "דרגה"],
-      impact.personnel.map((p) => [
-        String(p.person_id ?? ""),
-        String(p.full_name ?? ""),
-        String(p.department ?? ""),
-        String(p.gender ?? ""),
-        String(p.rank ?? ""),
-      ]),
-    );
-  }
-  if (impact.rooms.length > 0) {
-    void exportToExcel(
-      `חדרים_שנמחקו_${ts}`,
-      ["מבנה", "חדר", "מיטות", "דרגה", "מגדר", "זירה ייעודית"],
-      impact.rooms.map((r) => [
-        String(r.building_name ?? ""),
-        String(r.room_number ?? ""),
-        String(r.number_of_beds ?? ""),
-        String(r.room_rank ?? ""),
-        String(r.gender ?? ""),
-        String(r.designated_department ?? ""),
-      ]),
-    );
-  }
 }
 
 function showIntegrityReport(report?: IntegrityReport) {

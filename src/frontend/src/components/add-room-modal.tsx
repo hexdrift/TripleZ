@@ -387,9 +387,9 @@ function RoomCSV({ settings, status, message, setStatus, setMessage, onDone }: {
       toast.success(`${rows.length} חדרים נטענו בהצלחה`);
 
       if (result.warnings?.unknown_personnel?.length) {
-        downloadBase64Excel(result.warnings.excel_base64, "אנשים_לא_מזוהים");
-        toast.error(`${result.warnings.message} — קובץ אקסל עם הפרטים הורד אוטומטית`, {
+        toast.error(result.warnings.message, {
           autoClose: 10000,
+          onClick: () => downloadBase64Excel(result.warnings!.excel_base64, "אנשים_לא_מזוהים"),
         });
       }
       setTimeout(onDone, 700);

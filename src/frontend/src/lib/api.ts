@@ -223,20 +223,6 @@ export async function updateSettings(settings: Partial<AppSettings>): Promise<Ap
   });
 }
 
-export interface SettingsImpact {
-  has_impact: boolean;
-  details: string[];
-  affected_personnel: Record<string, unknown>[];
-  affected_rooms: Record<string, unknown>[];
-}
-
-export async function checkSettingsImpact(settings: Partial<AppSettings>): Promise<SettingsImpact> {
-  return fetchJSON<SettingsImpact>("/admin/settings/check-impact", {
-    method: "POST",
-    body: JSON.stringify(settings),
-  });
-}
-
 export interface SetupRoom {
   building_name: string;
   room_number: number;
@@ -323,10 +309,6 @@ export async function resetAll(): Promise<{ ok: boolean }> {
   return fetchJSON("/admin/reset-all", { method: "POST" });
 }
 
-export async function releaseSavedAssignment(personId: string): Promise<{ ok: boolean; detail?: string }> {
-  return fetchJSON(`/admin/saved-assignment/${encodeURIComponent(personId)}`, { method: "DELETE" });
-}
-
 export async function setRoomDepartment(
   buildingName: string,
   roomNumber: number,
@@ -383,11 +365,9 @@ export interface AppSettings {
   departments: string[];
   buildings: string[];
   personnel_url: string;
-  api_key: string;
   personnel_sync_interval_seconds: number;
   personnel_sync_paused: boolean;
   auto_assign_policy: "department_first" | "fill_first";
-  bed_reservation_policy: "reserve" | "best_effort";
   admin_password: string;
   dept_passwords: Record<string, string>;
   integrity_report?: IntegrityReport;
@@ -459,7 +439,7 @@ export function departmentSummaries(rooms: Room[]): DepartmentSummary[] {
         totalRooms: dRooms.length,
         totalBeds,
         occupiedBeds,
-        availableBeds: dRooms.reduce((s, r) => s + r.available_beds, 0),
+        availableBeds: totalBeds - occupiedBeds,
         occupancyRate: totalBeds > 0 ? occupiedBeds / totalBeds : 0,
         buildings: [...new Set(dRooms.map((r) => r.building_name))].sort(),
       };
@@ -484,7 +464,7 @@ export function genderSummaries(rooms: Room[]): GenderSummary[] {
         totalRooms: gRooms.length,
         totalBeds,
         occupiedBeds,
-        availableBeds: gRooms.reduce((s, r) => s + r.available_beds, 0),
+        availableBeds: totalBeds - occupiedBeds,
         occupancyRate: totalBeds > 0 ? occupiedBeds / totalBeds : 0,
       };
     })
@@ -508,7 +488,7 @@ export function rankSummaries(rooms: Room[]): RankSummary[] {
         totalRooms: rRooms.length,
         totalBeds,
         occupiedBeds,
-        availableBeds: rRooms.reduce((s, r) => s + r.available_beds, 0),
+        availableBeds: totalBeds - occupiedBeds,
         occupancyRate: totalBeds > 0 ? occupiedBeds / totalBeds : 0,
       };
     })
@@ -532,7 +512,7 @@ export function buildingSummaries(rooms: Room[]): BuildingSummary[] {
         totalRooms: bRooms.length,
         totalBeds,
         occupiedBeds,
-        availableBeds: bRooms.reduce((s, r) => s + r.available_beds, 0),
+        availableBeds: totalBeds - occupiedBeds,
         occupancyRate: totalBeds > 0 ? occupiedBeds / totalBeds : 0,
         departments: [...new Set(bRooms.flatMap((r) => r.departments))].sort(),
         ranks: [...new Set(bRooms.map((r) => r.room_rank))].sort(),

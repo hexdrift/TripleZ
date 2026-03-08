@@ -69,7 +69,6 @@ const CHART_CARD_CLASS = "overflow-hidden rounded-2xl border-border/70 bg-card p
 const GRID_CLASS = "stroke-border/70";
 const TOOLTIP_Z: React.CSSProperties = { zIndex: 10 };
 const TICK_STYLE = { fill: "var(--muted-foreground)", fontSize: 12 };
-const AXIS_LABEL_STYLE = { fill: "var(--muted-foreground)", fontSize: 11, fontWeight: 500 };
 
 export function DashboardAnalytics({
   capacityTitle,
@@ -231,7 +230,7 @@ function PrimaryCapacityCard({
             !ready ? (
               <ChartPlaceholder />
             ) : view === "rate" ? (
-              <AreaChart width={size.width} height={size.height} data={chartData} margin={{ top: 8, right: 12, left: 8, bottom: 24 }}>
+              <AreaChart width={size.width} height={size.height} data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="capacity-rate-area" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--color-chart-2)" stopOpacity={0.22} />
@@ -239,7 +238,7 @@ function PrimaryCapacityCard({
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" className={GRID_CLASS} />
-                <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} label={{ value: "מבנה", position: "insideBottom", offset: -16, style: AXIS_LABEL_STYLE }} />
+                <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} />
                 <YAxis
                   domain={[0, 100]}
                   tickLine={false}
@@ -247,7 +246,6 @@ function PrimaryCapacityCard({
                   tickMargin={10}
                   tick={TICK_STYLE}
                   tickFormatter={(value: number) => `${value}%`}
-                  label={{ value: "אחוז תפוסה", angle: -90, position: "insideLeft", offset: 4, style: AXIS_LABEL_STYLE }}
                 />
                 <Tooltip content={<CapacityRateTooltip />} wrapperStyle={TOOLTIP_Z} cursor={{ stroke: "var(--border)", strokeDasharray: "4 4" }} />
                 <Area
@@ -262,10 +260,10 @@ function PrimaryCapacityCard({
                 />
               </AreaChart>
             ) : (
-              <BarChart width={size.width} height={size.height} data={chartData} margin={{ top: 8, right: 12, left: 8, bottom: 24 }}>
+              <BarChart width={size.width} height={size.height} data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" className={GRID_CLASS} />
-                <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} label={{ value: "מבנה", position: "insideBottom", offset: -16, style: AXIS_LABEL_STYLE }} />
-                <YAxis tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} label={{ value: "מיטות", angle: -90, position: "insideLeft", offset: 4, style: AXIS_LABEL_STYLE }} />
+                <XAxis dataKey="shortLabel" tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} />
+                <YAxis tickLine={false} axisLine={false} tickMargin={10} tick={TICK_STYLE} />
                 <Tooltip content={<CapacityBedsTooltip />} wrapperStyle={TOOLTIP_Z} cursor={{ fill: "color-mix(in srgb, var(--muted) 45%, transparent)" }} />
                 <Bar
                   dataKey="occupied"
@@ -443,9 +441,9 @@ function RoomStatusCard({ roomStatus, ready, className }: { roomStatus: RoomStat
       <CardContent className="pt-5">
         <ChartSurface className="h-[220px] min-w-0">
           {(size) => ready ? (
-              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 18, left: 18, bottom: 20 }} barCategoryGap={20}>
+              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 18, left: 18, bottom: 0 }} barCategoryGap={20}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" className={GRID_CLASS} />
-                <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={TICK_STYLE} label={{ value: "מספר חדרים", position: "insideBottom", offset: -12, style: AXIS_LABEL_STYLE }} />
+                <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={TICK_STYLE} />
                 <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} tickMargin={14} tick={TICK_STYLE} width={52} />
                 <Tooltip content={<RoomStatusTooltip total={total} />} wrapperStyle={TOOLTIP_Z} cursor={{ fill: "color-mix(in srgb, var(--muted) 45%, transparent)" }} />
                 <Bar dataKey="value" radius={[8, 8, 8, 8]} maxBarSize={26} isAnimationActive={false}>
@@ -460,19 +458,17 @@ function RoomStatusCard({ roomStatus, ready, className }: { roomStatus: RoomStat
             )}
         </ChartSurface>
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           {items.map((item) => {
             const percentage = total > 0 ? Math.round((item.value / total) * 100) : 0;
             return (
-              <div key={item.label} className="flex items-center justify-between rounded-xl border border-border/70 bg-muted/[0.18] px-3 py-2.5">
-                <div className="flex items-center gap-2">
+              <div key={item.label} className="rounded-xl border border-border/70 bg-muted/[0.18] px-3 py-3">
+                <div className="mb-2 flex items-center gap-2">
                   <LegendDot color={item.fill} />
-                  <div>
-                    <div className="text-sm font-medium text-foreground">{item.label}</div>
-                    <div className="text-[11px] text-muted-foreground">{item.value} חדרים</div>
-                  </div>
+                  <span className="text-[12px] font-medium text-foreground">{item.label}</span>
                 </div>
-                <div className="text-sm font-semibold text-foreground">{percentage}%</div>
+                <div className="text-2xl font-semibold tracking-[-0.04em] text-foreground">{item.value}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">{percentage}% מהחדרים</div>
               </div>
             );
           })}
@@ -506,7 +502,7 @@ function RankPressureCard({ items, ready, className }: { items: RankItem[]; read
       <CardContent className="pt-5">
         <ChartSurface className="h-[220px] min-w-0">
           {(size) => ready ? (
-              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 18, left: 18, bottom: 20 }} barCategoryGap={18}>
+              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 18, left: 18, bottom: 0 }} barCategoryGap={18}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" className={GRID_CLASS} />
                 <XAxis
                   type="number"
@@ -515,7 +511,6 @@ function RankPressureCard({ items, ready, className }: { items: RankItem[]; read
                   axisLine={false}
                   tick={TICK_STYLE}
                   tickFormatter={(value: number) => `${value}%`}
-                  label={{ value: "אחוז תפוסה", position: "insideBottom", offset: -12, style: AXIS_LABEL_STYLE }}
                 />
                 <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} tickMargin={14} tick={TICK_STYLE} width={90} />
                 <Tooltip content={<RankTooltip />} wrapperStyle={TOOLTIP_Z} cursor={{ fill: "color-mix(in srgb, var(--muted) 45%, transparent)" }} />
@@ -601,9 +596,9 @@ function AssignmentGapCard({
 
         <ChartSurface className="h-[260px] min-w-0">
           {(size) => ready ? (
-              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 24, left: 24, bottom: 20 }} barCategoryGap={18}>
+              <BarChart width={size.width} height={size.height} data={items} layout="vertical" margin={{ top: 4, right: 24, left: 24, bottom: 0 }} barCategoryGap={18}>
                 <CartesianGrid horizontal={false} strokeDasharray="3 3" className={GRID_CLASS} />
-                <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={TICK_STYLE} label={{ value: "מספר אנשים", position: "insideBottom", offset: -12, style: AXIS_LABEL_STYLE }} />
+                <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={TICK_STYLE} />
                 <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} tickMargin={14} tick={TICK_STYLE} width={96} />
                 <Tooltip content={<AssignmentGapTooltip />} wrapperStyle={TOOLTIP_Z} cursor={{ fill: "color-mix(in srgb, var(--muted) 45%, transparent)" }} />
                 <Bar dataKey="assigned" stackId="assignment-gap" fill="var(--color-chart-4)" radius={[0, 0, 0, 0]} maxBarSize={28} isAnimationActive={false} />
