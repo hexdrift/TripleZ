@@ -48,6 +48,7 @@ playwright-report/
 # PyInstaller
 *.spec
 !app.spec
+dist/
 
 # Legacy UI dir
 ui/
