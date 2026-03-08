@@ -2,14 +2,14 @@
 # Build targets:
 #   docker build -t triplez .                         → single pod (backend + frontend)
 #   docker build --target backend -t triplez-api .    → backend only
-#   docker build --target frontend -t triplez-web .   → frontend only (nginx)
+#   docker build --target frontend -t triplez-web .   → frontend only (serve)
 #
 # Single pod:
 #   docker run -v triplez-data:/data -p 8000:8000 triplez
 #
 # Two pods:
 #   docker run -v triplez-data:/data -p 8000:8000 triplez-api
-#   docker run -p 80:80 triplez-web              (set BACKEND_URL to backend host)
+#   docker run -p 3000:3000 triplez-web
 
 # ── Stage 1: Build Next.js static export ──
 FROM node:20-alpine AS frontend-builder
@@ -56,13 +56,16 @@ USER triplez
 
 CMD ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
-# ── Stage 3: Frontend-only (nginx + static files) ──
-FROM nginx:stable-alpine AS frontend
+# ── Stage 3: Frontend-only (static file server) ──
+FROM node:20-alpine AS frontend
 
-COPY --from=frontend-builder /app/frontend/out /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN npm install -g serve
 
-EXPOSE 80
+COPY --from=frontend-builder /app/frontend/out /app/out
+
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:80/ || exit 1
+  CMD wget -qO- http://localhost:3000/ || exit 1
+
+CMD ["serve", "-s", "/app/out", "-l", "3000"]
