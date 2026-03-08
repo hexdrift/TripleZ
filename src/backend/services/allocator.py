@@ -295,12 +295,18 @@ class RoomAllocatorCore:
         self,
         *,
         department: Optional[str] = None,
+        gender: Optional[str] = None,
+        rank: Optional[str] = None,
+        person_ids: Optional[list[str]] = None,
     ) -> Dict[str, Any]:
         """Automatically assign every currently unassigned person.
 
         Args:
             department: Optional department scope. When provided, only personnel
                 from that department are considered.
+            gender: Optional gender filter.
+            rank: Optional rank filter.
+            person_ids: Optional list of specific person IDs to assign.
 
         Returns:
             A structured report containing per-person placement outcomes.
@@ -309,6 +315,13 @@ class RoomAllocatorCore:
         if department:
             department = normalize_department(department)
             personnel_rows = [person for person in personnel_rows if person["department"] == department]
+        if gender:
+            personnel_rows = [person for person in personnel_rows if person.get("gender") == gender]
+        if rank:
+            personnel_rows = [person for person in personnel_rows if person.get("rank") == rank]
+        if person_ids:
+            id_set = set(person_ids)
+            personnel_rows = [person for person in personnel_rows if str(person["person_id"]) in id_set]
 
         assigned_now: list[Dict[str, Any]] = []
         already_assigned: list[Dict[str, Any]] = []

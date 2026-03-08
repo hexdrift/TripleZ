@@ -15,6 +15,7 @@ import { buildingHe, deptHe, rankHe } from "@/lib/hebrew";
 import { cn } from "@/lib/utils";
 import { Personnel, Room } from "@/lib/types";
 import { useAppData } from "./app-shell";
+import { isRoomAssignableByManager } from "@/lib/room-utils";
 import {
   IconAlertCircle,
   IconCheck,
@@ -167,12 +168,19 @@ function TabButton({
 }
 
 function SwapTab() {
-  const { rooms, personnel, dataVersion } = useAppData();
+  const { rooms, personnel, auth, dataVersion } = useAppData();
   const [personA, setPersonA] = useState<Personnel | null>(null);
   const [personB, setPersonB] = useState<Personnel | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const isManager = auth.role !== "admin";
+  const managerDept = auth.department || "";
+  const scopedPersonnel = useMemo(
+    () => isManager ? personnel.filter((p) => p.department === managerDept) : personnel,
+    [isManager, managerDept, personnel],
+  );
 
   const roomMap = useMemo(() => {
     const map = new Map<string, Room>();
@@ -227,7 +235,7 @@ function SwapTab() {
       <div className="grid gap-4 sm:grid-cols-2">
         <PickerSection label="אדם א׳">
           <PersonPicker
-            personnel={personnel}
+            personnel={scopedPersonnel}
             selected={personA}
             onSelect={(p) => {
               setPersonA(p);
@@ -254,7 +262,7 @@ function SwapTab() {
 
         <PickerSection label="אדם ב׳">
           <PersonPicker
-            personnel={personnel}
+            personnel={scopedPersonnel}
             selected={personB}
             onSelect={(p) => {
               setPersonB(p);
@@ -314,13 +322,28 @@ function SwapTab() {
 }
 
 function MoveTab() {
-  const { rooms, personnel, dataVersion } = useAppData();
+  const { rooms, personnel, auth, dataVersion } = useAppData();
   const [person, setPerson] = useState<Personnel | null>(null);
   const [targetBuilding, setTargetBuilding] = useState("");
   const [targetRoom, setTargetRoom] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const isManager = auth.role !== "admin";
+  const managerDept = auth.department || "";
+  const scopedPersonnel = useMemo(
+    () => isManager ? personnel.filter((p) => p.department === managerDept) : personnel,
+    [isManager, managerDept, personnel],
+  );
+  const personnelMap = useMemo(
+    () => new Map(personnel.map((p) => [p.person_id, p])),
+    [personnel],
+  );
+  const scopedRooms = useMemo(
+    () => isManager ? rooms.filter((r) => isRoomAssignableByManager(r, managerDept, personnelMap)) : rooms,
+    [isManager, managerDept, personnelMap, rooms],
+  );
 
   const roomMap = useMemo(() => {
     const map = new Map<string, Room>();
@@ -335,7 +358,7 @@ function MoveTab() {
   const buildings = useMemo(() => {
     if (!person) return [];
     return [...new Set(
-      rooms
+      scopedRooms
         .filter((room) => {
           if (room.available_beds <= 0) return false;
           if (!isGenderCompatible(person, room)) return false;
@@ -347,11 +370,11 @@ function MoveTab() {
         })
         .map((room) => room.building_name),
     )].sort();
-  }, [rooms, person, currentRoom]);
+  }, [scopedRooms, person, currentRoom]);
 
   const availableRooms = useMemo(() => {
     if (!targetBuilding || !person) return [];
-    return rooms
+    return scopedRooms
       .filter((room) => {
         if (room.building_name !== targetBuilding || room.available_beds <= 0)
           return false;
@@ -363,7 +386,7 @@ function MoveTab() {
         );
       })
       .sort((a, b) => a.room_number - b.room_number);
-  }, [rooms, targetBuilding, currentRoom, person]);
+  }, [scopedRooms, targetBuilding, currentRoom, person]);
 
   const targetRoomDetails = availableRooms.find(
     (room) => String(room.room_number) === targetRoom,
@@ -405,7 +428,7 @@ function MoveTab() {
     <div className="space-y-4">
       <PickerSection label="אדם להעברה">
         <PersonPicker
-          personnel={personnel}
+          personnel={scopedPersonnel}
           selected={person}
           onSelect={(p) => {
             setPerson(p);
@@ -446,7 +469,7 @@ function MoveTab() {
                       : "border-border/70 bg-background text-foreground hover:border-foreground/30 hover:bg-muted/40",
                   )}
                 >
-                  מבנה {buildingHe(b)}
+                  {buildingHe(b)}
                 </button>
               ))}
             </div>
@@ -791,7 +814,7 @@ function personMonogram(person: Personnel) {
 
 function roomLocationLabel(room?: Room) {
   if (!room) return "ללא שיבוץ";
-  return `מבנה ${buildingHe(room.building_name)} · חדר ${room.room_number}`;
+  return `${buildingHe(room.building_name)} · חדר ${room.room_number}`;
 }
 
 function AlertBox({

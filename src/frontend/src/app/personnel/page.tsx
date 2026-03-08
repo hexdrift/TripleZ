@@ -88,7 +88,7 @@ function PersonnelContent() {
         person.person_id,
         person.full_name,
         person.building_name,
-        ...(person.building_name ? [`מבנה ${buildingHe(person.building_name)}`] : []),
+        ...(person.building_name ? [`${buildingHe(person.building_name)}`] : []),
         ...(person.room_number != null ? [String(person.room_number)] : []),
         person.room_rank,
         rankHe(person.room_rank),
@@ -142,7 +142,7 @@ function PersonnelContent() {
   const uniqueValues: Record<string, { value: string; label: string }[]> = {
     person_id: [...new Set(allRows.map((p) => p.person_id))].sort((a, b) => a.localeCompare(b, "he")).map((v) => ({ value: v, label: v })),
     full_name: [...new Set(allRows.map((p) => p.full_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, "he")).map((v) => ({ value: v, label: v })),
-    building_name: [...new Set(allRows.map((p) => p.building_name).filter(Boolean))].map((v) => ({ value: v, label: `מבנה ${buildingHe(v)}` })),
+    building_name: [...new Set(allRows.map((p) => p.building_name).filter(Boolean))].map((v) => ({ value: v, label: `${buildingHe(v)}` })),
     room_number: [...new Set(allRows.map((p) => p.room_number).filter((v): v is number => v != null).map(String))].sort((a, b) => Number(a) - Number(b)).map((v) => ({ value: v, label: v })),
     room_rank: [...new Set(allRows.map((p) => p.room_rank))].map((v) => ({ value: v, label: rankHe(v) })),
     department: [...new Set(allRows.map((p) => p.department))].map((v) => ({ value: v, label: deptHe(v) })),
@@ -185,7 +185,7 @@ function PersonnelContent() {
                     p.person_id,
                     p.full_name || "",
                     p.assignment_status,
-                    p.building_name ? `מבנה ${buildingHe(p.building_name)}` : "",
+                    p.building_name ? `${buildingHe(p.building_name)}` : "",
                     p.room_number != null ? String(p.room_number) : "",
                     rankHe(p.room_rank),
                     ...(isManager ? [] : [deptHe(p.department)]),
@@ -289,7 +289,7 @@ function PersonnelContent() {
                         <TableCell className="px-4 py-2.5 text-[14px] font-semibold text-foreground">{person.full_name || "—"}</TableCell>
                         <TableCell className="px-4 py-2.5 text-[13px] text-muted-foreground">{person.assignment_status}</TableCell>
                         <TableCell className="px-4 py-2.5 text-[13px] text-muted-foreground">
-                          {person.building_name ? `מבנה ${buildingHe(person.building_name)}` : "—"}
+                          {person.building_name ? `${buildingHe(person.building_name)}` : "—"}
                         </TableCell>
                         <TableCell className="px-4 py-2.5 text-[13px] text-muted-foreground">
                           {person.room_number != null ? `חדר ${person.room_number}` : "—"}

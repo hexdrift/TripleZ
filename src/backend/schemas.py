@@ -347,6 +347,9 @@ class AutoAssignRequest(BaseModel):
     """Request body for automatically assigning currently unassigned personnel."""
 
     department: Optional[str] = None
+    gender: Optional[str] = None
+    rank: Optional[str] = None
+    person_ids: Optional[list[str]] = None
     expected_version: Optional[int] = None
 
     @field_validator("department", mode="before")

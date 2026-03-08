@@ -51,6 +51,11 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  isRoomAssignableByManager,
+  isHighestRankRoom,
+  getOccupantDepartment,
+} from "@/lib/room-utils";
 
 interface RoomDetailModalProps {
   room: Room | null;
@@ -90,6 +95,20 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     auth.role === "admin" ? "chooser" : "assignments",
   );
   const [direction, setDirection] = useState(1);
+  const [highestRank, setHighestRank] = useState<string | null>(null);
+
+  const personnelMap = useMemo(
+    () => new Map(personnel.map((p) => [p.person_id, p])),
+    [personnel],
+  );
+
+  useEffect(() => {
+    let active = true;
+    getAuthContext()
+      .then((ctx) => { if (active) setHighestRank(ctx.ranks_high_to_low[0] ?? null); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const liveRoom = useMemo(() => {
     if (!room) return null;
@@ -164,6 +183,12 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
   const selectedReserved = selectedBedData?.reserved ? selectedBedData : null;
   const selectedBedIsEmpty = selectedBed !== null && !selectedBedData;
   const isAdmin = auth.role === "admin";
+  const isManager = !isAdmin;
+  const managerDept = auth.department || "";
+  const roomIsHighestRank = isManager && isHighestRankRoom(liveRoom, highestRank);
+  const roomIsAssignable = isManager
+    ? isRoomAssignableByManager(liveRoom, managerDept, personnelMap)
+    : true;
   const showBack = view === "detail" || (isAdmin && view !== "chooser");
 
   const modalTitle =
@@ -298,6 +323,23 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                           >
                             {bedOccupants.slice(start, end).map((occ, i) => {
                               const bedIdx = start + i;
+                              // Manager scoping: mask other-dept beds, hide empty in non-assignable rooms
+                              const isOtherDept = isManager && occ && !occ.reserved
+                                && getOccupantDepartment(occ.personId, personnelMap) !== managerDept;
+                              const hideEmptyBed = isManager && !occ && !roomIsAssignable;
+                              if (hideEmptyBed) {
+                                return (
+                                  <ClickableBed
+                                    key={bedIdx}
+                                    index={bedIdx}
+                                    occupied={false}
+                                    reserved={false}
+                                    selected={false}
+                                    deptColor={deptColor}
+                                    disabled
+                                  />
+                                );
+                              }
                               return (
                                 <ClickableBed
                                   key={bedIdx}
@@ -305,15 +347,18 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                                   occupied={!!occ && !occ.reserved}
                                   reserved={!!occ?.reserved}
                                   selected={false}
-                                  deptColor={deptColor}
+                                  deptColor={isOtherDept ? DEFAULT_DEPT_COLOR : deptColor}
                                   label={
-                                    occ
-                                      ? occ.reserved
-                                        ? occ.name || "שמורה"
-                                        : occ.name || occ.personId.slice(-4)
-                                      : undefined
+                                    isOtherDept
+                                      ? "זירה אחרת"
+                                      : occ
+                                        ? occ.reserved
+                                          ? occ.name || "שמורה"
+                                          : occ.name || occ.personId.slice(-4)
+                                        : undefined
                                   }
-                                  onClick={() => handleBedClick(bedIdx)}
+                                  onClick={isOtherDept ? undefined : () => handleBedClick(bedIdx)}
+                                  disabled={isOtherDept}
                                 />
                               );
                             })}
@@ -365,6 +410,8 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                     personId={selectedOccupant.personId}
                     name={selectedOccupant.name}
                     bedIndex={selectedBed! + 1}
+                    disableActions={roomIsHighestRank}
+                    managerDept={isManager ? managerDept : null}
                   />
                 ) : selectedReserved ? (
                   <ReservedBedDetail
@@ -377,13 +424,30 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                   />
                 ) : selectedBedIsEmpty ? (
                   <div className="space-y-3">
-                    {auth.role === "manager" ? (
-                      <p className="text-xs text-muted-foreground">
-                        ניתן לשבץ כאן רק אנשים מזירת{" "}
-                        {deptHe(auth.department || "")}.
+                    {roomIsHighestRank ? (
+                      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                        חדרי {rankHe(highestRank || "")} מנוהלים על ידי מנהל מערכת בלבד.
                       </p>
-                    ) : null}
-                    <RoomAssignForm room={liveRoom} personnel={personnel} />
+                    ) : isManager && !roomIsAssignable ? (
+                      <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+                        ניתן לשבץ רק לחדרים שתפוסים ברובם על ידי אנשי הזירה שלך.
+                      </p>
+                    ) : (
+                      <>
+                        {isManager ? (
+                          <p className="text-xs text-muted-foreground">
+                            ניתן לשבץ כאן רק אנשים מזירת{" "}
+                            {deptHe(managerDept)}.
+                          </p>
+                        ) : null}
+                        <RoomAssignForm
+                          room={liveRoom}
+                          personnel={isManager
+                            ? personnel.filter((p) => p.department === managerDept)
+                            : personnel}
+                        />
+                      </>
+                    )}
                   </div>
                 ) : null}
               </motion.div>
@@ -427,7 +491,7 @@ function ModeChooser({
             </div>
             <div>
               <p className="text-[15px] font-bold text-foreground">
-                עריכת מטא־דאטה
+                עריכת פרטי חדר
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                 עדכון זירה, דרגה, מגדר וקיבולת לשיבוץ האוטומטי.
@@ -499,7 +563,7 @@ function RoomMetadataEditor({ room }: { room: Room }) {
         },
         dataVersion,
       );
-      const successMessage = "מטא־דאטת החדר עודכנה.";
+      const successMessage = "פרטי החדר עודכנו.";
       setSuccess(successMessage);
       toast.success(successMessage);
     } catch (err) {
@@ -612,7 +676,7 @@ function RoomMetadataEditor({ room }: { room: Room }) {
           disabled={loading}
           className="w-full max-w-[520px]"
         >
-          {loading ? "שומר..." : "שמור מטא־דאטה"}
+          {loading ? "שומר..." : "שמור פרטי חדר"}
         </Button>
       </div>
     </div>
@@ -627,6 +691,7 @@ function ClickableBed({
   deptColor,
   label,
   onClick,
+  disabled = false,
 }: {
   index: number;
   occupied: boolean;
@@ -634,7 +699,8 @@ function ClickableBed({
   selected: boolean;
   deptColor: typeof DEFAULT_DEPT_COLOR;
   label?: string;
-  onClick: () => void;
+  onClick?: () => void;
+  disabled?: boolean;
 }) {
   const fill = reserved
     ? "rgba(245, 158, 11, 0.15)"
@@ -655,9 +721,11 @@ function ClickableBed({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       className={cn(
-        "relative flex min-w-[52px] max-w-[80px] flex-1 cursor-pointer select-none flex-col items-center rounded-lg p-1 transform-gpu transition-[transform,background-color,box-shadow,ring-color,opacity] duration-75 ease-out active:scale-[0.93] motion-reduce:transform-none motion-reduce:transition-none",
+        "relative flex min-w-[52px] max-w-[80px] flex-1 select-none flex-col items-center rounded-lg p-1 transform-gpu transition-[transform,background-color,box-shadow,ring-color,opacity] duration-75 ease-out motion-reduce:transform-none motion-reduce:transition-none",
+        disabled ? "cursor-default opacity-50" : "cursor-pointer active:scale-[0.93]",
         selected && "ring-2 ring-offset-1",
       )}
       style={{
@@ -673,10 +741,10 @@ function ClickableBed({
           : {}),
       }}
       onMouseEnter={(e) => {
-        if (!selected) e.currentTarget.style.backgroundColor = hoverBg;
+        if (!selected && !disabled) e.currentTarget.style.backgroundColor = hoverBg;
       }}
       onMouseLeave={(e) => {
-        if (!selected) e.currentTarget.style.backgroundColor = "";
+        if (!selected && !disabled) e.currentTarget.style.backgroundColor = "";
       }}
       title={
         reserved
@@ -832,10 +900,14 @@ function OccupantDetail({
   personId,
   name,
   bedIndex,
+  disableActions = false,
+  managerDept = null,
 }: {
   personId: string;
   name: string;
   bedIndex: number;
+  disableActions?: boolean;
+  managerDept?: string | null;
 }) {
   const { personnel, rooms, auth, dataVersion } = useAppData();
   const [loading, setLoading] = useState(false);
@@ -846,6 +918,10 @@ function OccupantDetail({
   const [rankOrder, setRankOrder] = useState<string[]>([]);
 
   const person = personnel.find((p) => p.person_id === personId);
+  const pMap = useMemo(
+    () => new Map(personnel.map((p) => [p.person_id, p])),
+    [personnel],
+  );
   const effectiveRankOrder = useMemo(
     () =>
       rankOrder.length > 0
@@ -918,30 +994,36 @@ function OccupantDetail({
       </div>
 
       {/* Action buttons */}
-      <div className={cn("grid gap-2", auth.role === "admin" ? "grid-cols-3" : "grid-cols-2")}>
-        <ActionButton
-          active={action === "swap"}
-          icon={<IconSwap size={14} />}
-          label="החלף"
-          onClick={() => toggleAction("swap")}
-        />
-        <ActionButton
-          active={action === "move"}
-          icon={<IconMove size={14} />}
-          label="העבר"
-          onClick={() => toggleAction("move")}
-        />
-        {auth.role === "admin" ? (
+      {disableActions ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          חדר זה מנוהל על ידי מנהל מערכת בלבד — לא ניתן לבצע פעולות.
+        </p>
+      ) : (
+        <div className={cn("grid gap-2", auth.role === "admin" ? "grid-cols-3" : "grid-cols-2")}>
           <ActionButton
-            active={false}
-            icon={<IconUserMinus size={14} />}
-            label="הסר"
-            variant="destructive"
-            onClick={() => setConfirmRemoveOpen(true)}
-            disabled={loading}
+            active={action === "swap"}
+            icon={<IconSwap size={14} />}
+            label="החלף"
+            onClick={() => toggleAction("swap")}
           />
-        ) : null}
-      </div>
+          <ActionButton
+            active={action === "move"}
+            icon={<IconMove size={14} />}
+            label="העבר"
+            onClick={() => toggleAction("move")}
+          />
+          {auth.role === "admin" ? (
+            <ActionButton
+              active={false}
+              icon={<IconUserMinus size={14} />}
+              label="הסר"
+              variant="destructive"
+              onClick={() => setConfirmRemoveOpen(true)}
+              disabled={loading}
+            />
+          ) : null}
+        </div>
+      )}
 
       {error ? (
         <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
@@ -966,7 +1048,7 @@ function OccupantDetail({
           >
             <InlineSwap
               personId={personId}
-              personnel={personnel}
+              personnel={managerDept ? personnel.filter((p) => p.department === managerDept) : personnel}
               rooms={rooms}
               rankOrder={effectiveRankOrder}
               onDone={(msg) => {
@@ -987,7 +1069,9 @@ function OccupantDetail({
           >
             <InlineMove
               personId={personId}
-              rooms={rooms}
+              rooms={managerDept
+                ? rooms.filter((r) => isRoomAssignableByManager(r, managerDept, pMap))
+                : rooms}
               rankOrder={effectiveRankOrder}
               onDone={(msg) => {
                 setSuccess(msg);
@@ -1351,7 +1435,7 @@ function InlineMove({
           </p>
           {targetBuilding ? (
             <Badge variant="secondary" className="text-[10px]">
-              מבנה {buildingHe(targetBuilding)}
+              {buildingHe(targetBuilding)}
             </Badge>
           ) : null}
         </div>
@@ -1371,7 +1455,7 @@ function InlineMove({
                   : "border-border/70 bg-background text-foreground hover:border-foreground/40 hover:bg-muted/50",
               )}
             >
-              מבנה {buildingHe(b)}
+              {buildingHe(b)}
             </button>
           ))}
         </div>

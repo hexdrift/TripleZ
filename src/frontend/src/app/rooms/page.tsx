@@ -115,7 +115,7 @@ function RoomsContent() {
       const searchableValues = [
         room.building_name,
         buildingHe(room.building_name),
-        `מבנה ${buildingHe(room.building_name)}`,
+        `${buildingHe(room.building_name)}`,
         String(room.room_number),
         room.room_rank,
         rankHe(room.room_rank),
@@ -183,7 +183,7 @@ function RoomsContent() {
     () => ({
       building_name: [...new Set(rooms.map((room) => room.building_name))]
         .sort((a, b) => buildingHe(a).localeCompare(buildingHe(b), "he"))
-        .map((value) => ({ value, label: `מבנה ${buildingHe(value)}` })),
+        .map((value) => ({ value, label: `${buildingHe(value)}` })),
       room_number: [...new Set(rooms.map((room) => String(room.room_number)))]
         .sort((a, b) => Number(a) - Number(b))
         .map((value) => ({ value, label: value })),
@@ -283,7 +283,7 @@ function RoomsContent() {
                     "חדרים",
                     ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסה", "מצב"],
                     sortedRooms.map((room) => [
-                      `מבנה ${buildingHe(room.building_name)}`,
+                      `${buildingHe(room.building_name)}`,
                       String(room.room_number),
                       rankHe(room.room_rank),
                       roomDepartmentsLabel(room),
@@ -512,7 +512,7 @@ function RoomRow({ room, onClick }: { room: Room; onClick: () => void }) {
       aria-label={`פתח פרטי חדר ${room.room_number}`}
       className="cursor-pointer transition-colors hover:bg-accent/[0.45]"
     >
-      <TableCell className="px-4 py-3 font-semibold text-foreground">מבנה {buildingHe(room.building_name)}</TableCell>
+      <TableCell className="px-4 py-3 font-semibold text-foreground">{buildingHe(room.building_name)}</TableCell>
       <TableCell className="px-4 py-3 font-semibold text-foreground">{room.room_number}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{rankHe(room.room_rank)}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{roomDepartmentsLabel(room)}</TableCell>

@@ -35,7 +35,7 @@ export function DepartmentCard({ department }: { department: DepartmentSummary }
                   {deptHe(department.name)}
                 </h3>
                 <p className="text-[12px] text-muted-foreground transition-colors duration-150 group-hover:text-foreground/72">
-                  {department.totalRooms} חדרים · {department.buildings.map((b) => `מבנה ${buildingHe(b)}`).join(", ")}
+                  {department.totalRooms} חדרים · {department.buildings.map((b) => buildingHe(b)).join(", ")}
                 </p>
               </div>
             </div>
@@ -60,8 +60,8 @@ export function DepartmentCard({ department }: { department: DepartmentSummary }
 
           <div className="grid grid-cols-3 gap-2">
             <MiniStat icon={<IconBed size={13} />} label="מיטות" value={department.totalBeds} />
-            <MiniStat icon={<IconBedOff size={13} />} label="תפוסים" value={department.occupiedBeds} tone="warning" />
-            <MiniStat icon={<IconBed size={13} />} label="פנויים" value={department.availableBeds} tone="accent" />
+            <MiniStat icon={<IconBedOff size={13} />} label="תפוסות" value={department.occupiedBeds} tone="warning" />
+            <MiniStat icon={<IconBed size={13} />} label="פנויות" value={department.availableBeds} tone="accent" />
           </div>
         </CardContent>
       </Card>
