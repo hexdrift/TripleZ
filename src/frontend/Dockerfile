@@ -1,11 +1,9 @@
-# TripleZ Frontend (nginx + static export)
-# Build:  docker build -t triplez-web src/frontend
-# Run:    docker run -p 80:80 triplez-web
+# TripleZ Frontend (static export served by Node)
+# Build:  docker build -f src/frontend/Dockerfile -t triplez-web .
+# Run:    docker run -p 3000:3000 -e NEXT_PUBLIC_API_URL=http://backend:8000/api triplez-web
 #
-# Must be built from the repo root (for scripts/inline-css.mjs):
-#   docker build -f src/frontend/Dockerfile -t triplez-web .
-#
-# Set BACKEND_URL via nginx env or override nginx.conf for your backend host.
+# Must be built from the repo root (for scripts/inline-css.mjs).
+# Set NEXT_PUBLIC_API_URL to the backend API base URL at build time.
 
 # ── Stage 1: Build static export ──
 FROM node:20-alpine AS builder
@@ -13,6 +11,9 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
+
+ARG NEXT_PUBLIC_API_URL=http://backend:8000/api
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 COPY src/frontend/package.json src/frontend/package-lock.json* ./
 RUN npm ci
@@ -22,13 +23,16 @@ COPY src/frontend/ .
 COPY scripts/inline-css.mjs /scripts/inline-css.mjs
 RUN npm run build
 
-# ── Stage 2: Serve with nginx ──
-FROM nginx:stable-alpine
+# ── Stage 2: Serve static files ──
+FROM node:20-alpine
 
-COPY --from=builder /app/out /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN npm install -g serve
 
-EXPOSE 80
+COPY --from=builder /app/out /app/out
+
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:80/ || exit 1
+  CMD wget -qO- http://localhost:3000/ || exit 1
+
+CMD ["serve", "-s", "/app/out", "-l", "3000"]
