@@ -216,12 +216,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onToggleCollapse={() => setSidebarCollapsed((current) => !current)}
           />
         </Suspense>
-        <div
+        <main
           className="relative min-h-screen px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 2xl:px-14"
           style={{ ["--sidebar-w" as string]: sidebarCollapsed ? "5rem" : "18.75rem" }}
         >
           <div className="mx-auto w-full max-w-[112rem]">{children}</div>
-        </div>
+        </main>
       </div>
     </Ctx.Provider>
   );
