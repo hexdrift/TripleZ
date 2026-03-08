@@ -417,6 +417,30 @@ function SettingsContent() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="overflow-hidden border-destructive/30 bg-gradient-to-br from-card via-card to-background/80">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-destructive flex items-center gap-2">
+                      <IconAlertCircle size={16} />
+                      איפוס נתונים
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      מחיקת כל החדרים וכוח האדם מהמערכת. פעולה זו אינה הפיכה.
+                    </p>
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowResetConfirm(true)}
+                    disabled={resetting}
+                  >
+                    <IconTrash size={14} />
+                    {resetting ? "מאפס..." : "איפוס הכל"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="lists" className="space-y-3">
@@ -480,33 +504,6 @@ function SettingsContent() {
           </TabsContent>
 
         </Tabs>
-      </motion.div>
-
-      <motion.div variants={fadeUp} transition={{ duration: 0.18 }}>
-        <Card className="overflow-hidden border-destructive/30 bg-gradient-to-br from-card via-card to-background/80">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-[15px] font-semibold text-destructive flex items-center gap-2">
-                  <IconAlertCircle size={16} />
-                  איפוס נתונים
-                </h3>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  מחיקת כל החדרים וכוח האדם מהמערכת. פעולה זו אינה הפיכה.
-                </p>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => setShowResetConfirm(true)}
-                disabled={resetting}
-              >
-                <IconTrash size={14} />
-                {resetting ? "מאפס..." : "איפוס הכל"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
       </motion.div>
 
       <ConfirmationDialog
