@@ -76,20 +76,15 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[runtime_hook_path],
     excludes=[
-        # GUI / plotting / visualization
         'matplotlib', 'tkinter', 'PyQt5', 'PyQt6', 'PySide2', 'PySide6',
         'bokeh', 'plotly', 'altair', 'panel', 'pyviz_comms', 'holoviews',
-        # Scientific / ML (not used by this app)
         'scipy', 'sklearn', 'scikit-learn', 'skimage', 'scikit-image',
         'statsmodels', 'sympy', 'astropy', 'patsy', 'pywt',
         'numba', 'llvmlite',
-        # Data / big-data
-        'pyarrow', 'dask', 'xarray', 'tables', 'h5py', 'fsspec', 'intake',
-        # Jupyter / notebook
+        'dask', 'xarray', 'tables', 'h5py', 'fsspec', 'intake',
         'IPython', 'ipykernel', 'ipywidgets', 'jupyter', 'jupyterlab',
         'notebook', 'nbformat', 'nbconvert', 'traitlets',
-        # Other unnecessary
-        'sphinx', 'docutils', 'babel', 'pygments',
+        'sphinx', 'docutils', 'pygments',
         'PIL', 'Pillow', 'imageio',
         'lxml', 'lark',
         'zmq', 'tornado',
@@ -97,8 +92,7 @@ a = Analysis(
         'botocore', 'boto3',
         'cryptography', 'bcrypt',
         'psycopg2', 'MySQLdb',
-        'cloudpickle', 'shelve',
-        'lib2to3', 'setuptools', 'pkg_resources', 'distutils',
+        'lib2to3',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -121,7 +115,7 @@ exe = EXE(
     name='TripleZ',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,
+    strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,

@@ -16,6 +16,9 @@ import subprocess
 import platform
 from typing import Optional
 
+import multiprocessing
+multiprocessing.freeze_support()
+
 import uvicorn
 
 # PyInstaller with console=False sets sys.stdout/stderr to None,
@@ -76,7 +79,8 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        uvicorn.run("src.backend.main:app", host="0.0.0.0", port=8000, log_level="info")
+        from src.backend.main import app as fastapi_app
+        uvicorn.run(fastapi_app, host="0.0.0.0", port=8000, log_level="info")
     except KeyboardInterrupt:
         print("\nShutting down...")
         sys.exit(0)
