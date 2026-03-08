@@ -51,7 +51,6 @@ playwright-report/
 # PyInstaller
 *.spec
 !app.spec
-dist/
 
 # Legacy UI dir (root only, not src/frontend/src/components/ui/)
 /ui/
