@@ -16,7 +16,6 @@ Setup:
   uvicorn src.backend.main:app --reload
 
 See src/backend/store/base.py for how to implement your store.
-See example.py for preloading DataFrames and all available API calls.
 """
 
 from __future__ import annotations
