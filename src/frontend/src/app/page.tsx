@@ -29,6 +29,11 @@ const AddRoomModal = dynamic(
   { ssr: false },
 );
 
+const AddPersonnelModal = dynamic(
+  () => import("@/components/add-personnel-modal").then((module) => module.AddPersonnelModal),
+  { ssr: false },
+);
+
 const SwapModal = dynamic(
   () => import("@/components/swap-modal").then((module) => module.SwapModal),
   { ssr: false },
@@ -55,6 +60,7 @@ const VIEW_COUNT_LABELS: Record<ViewMode, string> = {
 function DashboardContent() {
   const { rooms, buildings, personnel, dataVersion, loading, auth, viewMode, setViewMode } = useAppData();
   const [addRoomOpen, setAddRoomOpen] = useState(false);
+  const [addPersonnelOpen, setAddPersonnelOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [autoAssignLoading, setAutoAssignLoading] = useState(false);
@@ -75,7 +81,7 @@ function DashboardContent() {
   const metrics = useMemo(() => {
     const totalBeds = rooms.reduce((s, r) => s + r.number_of_beds, 0);
     const occupied = rooms.reduce((s, r) => s + r.occupant_count, 0);
-    const available = Math.max(totalBeds - occupied, 0);
+    const available = rooms.reduce((s, r) => s + r.available_beds, 0);
     const occupancyRate = totalBeds > 0 ? Math.round((occupied / totalBeds) * 100) : 0;
     return { totalBeds, occupied, available, occupancyRate };
   }, [rooms]);
@@ -307,7 +313,7 @@ function DashboardContent() {
                 size="sm"
                 onClick={() => exportToExcel(
                   "נתונים_מלאים",
-                  ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסים", "פנויים", "מצב", "דיירים"],
+                  ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסים", "שמורות", "פנויים", "מצב", "דיירים"],
                   rooms.map((r) => [
                     `מבנה ${buildingHe(r.building_name)}`,
                     String(r.room_number),
@@ -316,6 +322,7 @@ function DashboardContent() {
                     genderHe(r.gender),
                     String(r.number_of_beds),
                     String(r.occupant_count),
+                    String(r.reserved_beds || 0),
                     String(r.available_beds),
                     r.available_beds === 0 ? "מלא" : "פנוי",
                     r.occupant_ids.map((id) => r.occupant_names?.[id] || id).join(" | "),
@@ -371,7 +378,7 @@ function DashboardContent() {
         </div>
 
         {currentCount === 0 ? (
-          <EmptyState isManager={isManager} departmentLabel={departmentLabel} />
+          <EmptyState isManager={isManager} departmentLabel={departmentLabel} onAddRooms={() => setAddRoomOpen(true)} onAddPersonnel={() => setAddPersonnelOpen(true)} />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {viewMode === "buildings"
@@ -433,6 +440,7 @@ function DashboardContent() {
       ) : null}
 
       {addRoomOpen ? <AddRoomModal open={addRoomOpen} onClose={() => setAddRoomOpen(false)} /> : null}
+      {addPersonnelOpen ? <AddPersonnelModal open={addPersonnelOpen} onClose={() => setAddPersonnelOpen(false)} /> : null}
       {swapOpen ? <SwapModal open={swapOpen} onClose={() => setSwapOpen(false)} /> : null}
       <ConfirmationDialog
         open={autoAssignConfirmOpen}
@@ -588,7 +596,7 @@ function AnalyticsLoadingBlock() {
   );
 }
 
-function EmptyState({ isManager, departmentLabel }: { isManager: boolean; departmentLabel: string }) {
+function EmptyState({ isManager, departmentLabel, onAddRooms, onAddPersonnel }: { isManager: boolean; departmentLabel: string; onAddRooms: () => void; onAddPersonnel: () => void }) {
   return (
     <Card className="text-center overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
       <CardContent className="p-12">
@@ -602,7 +610,23 @@ function EmptyState({ isManager, departmentLabel }: { isManager: boolean; depart
           <p className="text-sm text-muted-foreground">
             כאשר יוגדרו חדרים לזירה שלך הם יופיעו כאן.
           </p>
-        ) : null}
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground mb-5">
+              טען חדרים ואנשי כוח אדם כדי להתחיל
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Button onClick={onAddRooms} className="inline-flex items-center gap-2">
+                <IconDoor size={15} />
+                טעינת חדרים
+              </Button>
+              <Button variant="outline" onClick={onAddPersonnel} className="inline-flex items-center gap-2">
+                <IconUsers size={15} />
+                טעינת כוח אדם
+              </Button>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

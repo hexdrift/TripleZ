@@ -1,3 +1,11 @@
+export interface ReservedPerson {
+  person_id: string;
+  full_name: string;
+  department: string;
+  rank: string;
+  saved_at: string;
+}
+
 export interface Room {
   building_name: string;
   room_number: number;
@@ -9,6 +17,8 @@ export interface Room {
   occupant_ids: string[];
   occupant_names: Record<string, string>;
   available_beds: number;
+  reserved_beds: number;
+  reserved_persons: ReservedPerson[];
   occupant_count: number;
 }
 
