@@ -4,25 +4,13 @@ from __future__ import annotations
 
 import os
 
-from src.backend.services.allocator import RoomAllocatorCore
-from src.backend.services.rank_policy import RankPolicy
 from src.backend.settings import get_default_database_url, get_ranks_high_to_low
-from src.backend.store.base import RemoteStore
 
 _data_version = 0
 
 
-def _create_store() -> RemoteStore:
-    """Return the RemoteStore implementation based on STORE_BACKEND env var.
-
-    Supported values:
-        memory      — in-memory dict store (data lost on restart)
-        sqlalchemy  — SQLAlchemy-backed store (default, persisted to SQLite
-                      unless DATABASE_URL is provided)
-
-    Returns:
-        A RemoteStore instance.
-    """
+def _create_store():
+    """Return the RemoteStore implementation based on STORE_BACKEND env var."""
     backend = os.environ.get("STORE_BACKEND", "sqlalchemy").lower()
 
     if backend == "sqlalchemy":
@@ -40,12 +28,39 @@ def _create_store() -> RemoteStore:
 
 
 store = _create_store()
-rank_policy = RankPolicy(get_ranks_high_to_low())
-core = RoomAllocatorCore(store, rank_policy=rank_policy)
+
+
+class _LazyCore:
+    """Proxy that defers pandas/allocator import until first use."""
+
+    _instance = None
+
+    def _ensure(self):
+        if self._instance is None:
+            from src.backend.services.allocator import RoomAllocatorCore
+            from src.backend.services.rank_policy import RankPolicy
+            self._instance = RoomAllocatorCore(
+                store, rank_policy=RankPolicy(get_ranks_high_to_low())
+            )
+
+    def __getattr__(self, name):
+        self._ensure()
+        return getattr(self._instance, name)
+
+    def __setattr__(self, name, value):
+        if name == "_instance":
+            super().__setattr__(name, value)
+        else:
+            self._ensure()
+            setattr(self._instance, name, value)
+
+
+core = _LazyCore()
 
 
 def reload_runtime_settings() -> None:
     """Refresh runtime policy objects after settings changes."""
+    from src.backend.services.rank_policy import RankPolicy
     ranks = get_ranks_high_to_low()
     core.rank_policy = RankPolicy(ranks)
 
