@@ -55,3 +55,4 @@ dist/
 
 # Legacy UI dir (root only, not src/frontend/src/components/ui/)
 /ui/
+.claude/
