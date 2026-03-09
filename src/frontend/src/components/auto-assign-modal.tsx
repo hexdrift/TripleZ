@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { autoAssignUnassigned, type AutoAssignFilters } from "@/lib/api";
 import { deptHe, genderHe, rankHe } from "@/lib/hebrew";
-import { IconCheck, IconFilter, IconSearch, IconUsers, IconX } from "@/components/icons";
+import { IconCheck, IconSearch, IconUsers, IconX } from "@/components/icons";
 import type { Personnel } from "@/lib/types";
 
 interface AutoAssignModalProps {
@@ -133,7 +134,24 @@ export function AutoAssignModal({
     }
   }
 
+  function handleTabChange(value: string) {
+    const mode = value as FilterMode;
+    setFilterMode(mode);
+    if (mode !== "department") setSelectedDepartment(null);
+    if (mode !== "gender") setSelectedGender(null);
+    if (mode !== "rank") setSelectedRank(null);
+  }
+
   const allVisibleSelected = filteredPersonnel.length > 0 && filteredPersonnel.every((p) => selectedPersonIds.has(p.person_id));
+
+  // Build tab options dynamically
+  const tabs: { value: FilterMode; label: string }[] = [
+    { value: "all", label: `הכל (${waitingPersonnel.length})` },
+  ];
+  if (!isManager && departments.length > 1) tabs.push({ value: "department", label: "זירה" });
+  if (genders.length > 1) tabs.push({ value: "gender", label: "מגדר" });
+  if (ranks.length > 1) tabs.push({ value: "rank", label: "דרגה" });
+  tabs.push({ value: "custom", label: "בחירה ידנית" });
 
   return (
     <Dialog
@@ -145,53 +163,32 @@ export function AutoAssignModal({
     >
       <DialogContent className="flex max-h-[85vh] max-w-[520px] flex-col gap-0 overflow-hidden p-0">
         {/* Header */}
-        <DialogHeader className="space-y-1.5 border-b px-6 py-5">
+        <DialogHeader className="border-b px-5 py-4">
           <DialogTitle className="flex items-center gap-2.5 text-lg font-semibold">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
               <IconUsers size={16} className="text-primary" />
             </div>
             שיבוץ אוטומטי
           </DialogTitle>
-          <DialogDescription className="text-[13px] leading-relaxed text-muted-foreground">
-            {isManager
-              ? "שיבוץ אוטומטי של אנשי כוח אדם בזירה שלך למיטות פנויות."
-              : "שיבוץ אוטומטי של אנשי כוח אדם למיטות פנויות לפי סינון."}
-          </DialogDescription>
         </DialogHeader>
 
-        {/* Filter Mode Tabs */}
-        <div className="border-b px-6 py-3">
-          <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-muted-foreground">סינון לפי</p>
-          <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={filterMode === "all"} onClick={() => { setFilterMode("all"); setSelectedDepartment(null); setSelectedGender(null); setSelectedRank(null); }}>
-              הכל ({waitingPersonnel.length})
-            </FilterChip>
-            {!isManager && departments.length > 1 ? (
-              <FilterChip active={filterMode === "department"} onClick={() => { setFilterMode("department"); setSelectedGender(null); setSelectedRank(null); }}>
-                <IconFilter size={12} /> זירה
-              </FilterChip>
-            ) : null}
-            {genders.length > 1 ? (
-              <FilterChip active={filterMode === "gender"} onClick={() => { setFilterMode("gender"); setSelectedDepartment(null); setSelectedRank(null); }}>
-                <IconFilter size={12} /> מגדר
-              </FilterChip>
-            ) : null}
-            {ranks.length > 1 ? (
-              <FilterChip active={filterMode === "rank"} onClick={() => { setFilterMode("rank"); setSelectedDepartment(null); setSelectedGender(null); }}>
-                <IconFilter size={12} /> דרגה
-              </FilterChip>
-            ) : null}
-            <FilterChip active={filterMode === "custom"} onClick={() => setFilterMode("custom")}>
-              <IconUsers size={12} /> בחירה ידנית
-            </FilterChip>
-          </div>
+        {/* Filter Tabs */}
+        <div className="border-b px-5 py-3">
+          <Tabs value={filterMode} onValueChange={handleTabChange}>
+            <TabsList className="w-full">
+              {tabs.map((tab) => (
+                <TabsTrigger key={tab.value} value={tab.value} className="min-w-0 flex-1 px-2 text-[12px]">
+                  {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
 
         {/* Filter Options */}
         <div className="flex-1 overflow-y-auto">
           {filterMode === "department" ? (
-            <div className="px-6 py-4">
-              <p className="mb-2.5 text-[13px] font-medium text-foreground">בחירת זירה</p>
+            <div className="px-5 py-4">
               <div className="grid grid-cols-2 gap-2">
                 {departments.map((dept) => {
                   const count = waitingPersonnel.filter((p) => p.department === dept).length;
@@ -211,8 +208,7 @@ export function AutoAssignModal({
           ) : null}
 
           {filterMode === "gender" ? (
-            <div className="px-6 py-4">
-              <p className="mb-2.5 text-[13px] font-medium text-foreground">בחירת מגדר</p>
+            <div className="px-5 py-4">
               <div className="grid grid-cols-2 gap-2">
                 {genders.map((g) => {
                   const count = waitingPersonnel.filter((p) => p.gender === g).length;
@@ -232,8 +228,7 @@ export function AutoAssignModal({
           ) : null}
 
           {filterMode === "rank" ? (
-            <div className="px-6 py-4">
-              <p className="mb-2.5 text-[13px] font-medium text-foreground">בחירת דרגה</p>
+            <div className="px-5 py-4">
               <div className="grid grid-cols-2 gap-2">
                 {ranks.map((r) => {
                   const count = waitingPersonnel.filter((p) => p.rank === r).length;
@@ -253,7 +248,7 @@ export function AutoAssignModal({
           ) : null}
 
           {filterMode === "custom" ? (
-            <div className="flex flex-col px-6 py-4">
+            <div className="flex flex-col px-5 py-4">
               {/* Search + select all */}
               <div className="mb-3 flex items-center gap-2">
                 <div className="relative flex-1">
@@ -320,7 +315,7 @@ export function AutoAssignModal({
           ) : null}
 
           {filterMode === "all" ? (
-            <div className="px-6 py-6">
+            <div className="px-5 py-6">
               <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-5 text-center">
                 <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                   <IconUsers size={18} className="text-primary" />
@@ -336,8 +331,12 @@ export function AutoAssignModal({
           ) : null}
         </div>
 
-        {/* Footer */}
-        <DialogFooter className="gap-2 border-t px-6 py-4 sm:flex-row sm:justify-start">
+        {/* Footer — cancel right (first in RTL), assign left (second in RTL) */}
+        <DialogFooter className="grid grid-cols-2 gap-2 border-t px-5 py-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading} className="gap-2">
+            <IconX size={14} />
+            ביטול
+          </Button>
           <Button
             onClick={handleAssign}
             disabled={loading || targetCount === 0}
@@ -348,14 +347,7 @@ export function AutoAssignModal({
             ) : (
               <IconUsers size={14} />
             )}
-            {loading
-              ? "משבץ..."
-              : targetCount > 0
-                ? `שבץ ${targetCount} אנשים`
-                : "בחר אנשים לשיבוץ"}
-          </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
-            ביטול
+            {loading ? "משבץ..." : "שבץ"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -364,22 +356,6 @@ export function AutoAssignModal({
 }
 
 /* ── Small sub-components ── */
-
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition-all ${
-        active
-          ? "bg-primary text-primary-foreground shadow-sm"
-          : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function OptionCard({
   selected,

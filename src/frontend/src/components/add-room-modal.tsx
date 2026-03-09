@@ -9,7 +9,7 @@ import { parseFile, toRoomPayload } from "@/lib/parse";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import {
   IconAlertCircle, IconBed, IconBuilding, IconCheck, IconCrown,
-  IconChevronDown, IconDoor, IconGender, IconHash, IconUpload, IconX,
+  IconChevronDown, IconDoor, IconGender, IconHash, IconPlus, IconUpload, IconX,
 } from "./icons";
 
 import {
@@ -309,7 +309,7 @@ function RoomForm({
         <Button
           type="submit"
           disabled={status === "loading"}
-          className="w-full max-w-[520px]"
+          className="w-full max-w-[520px] gap-2"
         >
           {status === "loading" ? (
             <>
@@ -321,7 +321,10 @@ function RoomForm({
               שומר...
             </>
           ) : (
-            "הוסף חדר"
+            <>
+              <IconPlus size={15} />
+              הוסף חדר
+            </>
           )}
         </Button>
       </div>

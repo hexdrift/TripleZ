@@ -28,6 +28,8 @@ import {
   IconBuilding,
   IconCrown,
   IconGender,
+  IconCheck,
+  IconTrash,
 } from "./icons";
 
 import {
@@ -358,7 +360,7 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
                                         : undefined
                                   }
                                   onClick={isOtherDept ? undefined : () => handleBedClick(bedIdx)}
-                                  disabled={isOtherDept}
+                                  disabled={!!isOtherDept}
                                 />
                               );
                             })}
@@ -674,8 +676,9 @@ function RoomMetadataEditor({ room }: { room: Room }) {
         <Button
           onClick={handleSave}
           disabled={loading}
-          className="w-full max-w-[520px]"
+          className="w-full max-w-[520px] gap-2"
         >
+          <IconCheck size={15} />
           {loading ? "שומר..." : "שמור פרטי חדר"}
         </Button>
       </div>
@@ -884,6 +887,7 @@ function ReservedBedDetail({
         title="לשחרר שמירת מיטה?"
         description={`המיטה תשוחרר ו${name || personId} לא ישובץ אוטומטית בעדכון הבא.`}
         confirmLabel="שחרר"
+        confirmIcon={<IconTrash size={14} />}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
           setConfirmOpen(false);
@@ -1088,6 +1092,7 @@ function OccupantDetail({
         title="להסיר מהחדר?"
         description={`${displayName} יוסר מהחדר הנוכחי.`}
         confirmLabel="הסר"
+        confirmIcon={<IconUserMinus size={14} />}
         onOpenChange={setConfirmRemoveOpen}
         onConfirm={() => {
           setConfirmRemoveOpen(false);

@@ -21,15 +21,20 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
   },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
-      <head />
+      <head>
+        {process.env.NEXT_PUBLIC_API_URL && (
+          <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_URL} />
+        )}
+      </head>
       <body>
         <div id="app-splash" aria-hidden="true">
-          <h1>Triple Z</h1>
+          <p>Triple Z</p>
         </div>
         <Providers>
           <TooltipProvider>
