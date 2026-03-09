@@ -81,8 +81,8 @@ def login(req: LoginRequest, response: Response) -> LoginResponse:
             value=create_session_token(role="admin"),
             max_age=SESSION_COOKIE_MAX_AGE,
             httponly=True,
-            samesite="lax",
-            secure=False,
+            samesite="none",
+            secure=True,
             path="/",
         )
         return LoginResponse(ok=True, role="admin")
@@ -95,8 +95,8 @@ def login(req: LoginRequest, response: Response) -> LoginResponse:
                 value=create_session_token(role="manager", department=dept),
                 max_age=SESSION_COOKIE_MAX_AGE,
                 httponly=True,
-                samesite="lax",
-                secure=False,
+                samesite="none",
+                secure=True,
                 path="/",
             )
             return LoginResponse(ok=True, role="manager", department=dept)
@@ -111,5 +111,5 @@ def logout(response: Response) -> dict:
     Returns:
         Dict with ``ok: True`` confirming the session was cleared.
     """
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/", samesite="none", secure=True)
     return {"ok": True}
