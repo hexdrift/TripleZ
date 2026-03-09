@@ -45,28 +45,10 @@ app = FastAPI(title="Room Allocator API", version="1.0")
 logger = logging.getLogger(__name__)
 
 
-def _cors_allowed_origins() -> list[str]:
-    """Return explicit origins for cookie-based auth in local/dev environments."""
-    raw = os.environ.get("TRIPLEZ_CORS_ORIGINS", "").strip()
-    if raw:
-        return [origin.strip().rstrip("/") for origin in raw.split(",") if origin.strip()]
-
-    return [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:3002",
-        "http://127.0.0.1:3002",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
-
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_allowed_origins(),
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

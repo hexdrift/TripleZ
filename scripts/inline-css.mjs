@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-const OUT_DIR = join(import.meta.dirname, '..', 'src', 'frontend', 'out');
+const OUT_DIR = process.env.OUT_DIR || join(import.meta.dirname, '..', 'src', 'frontend', 'out');
 
 function findHtmlFiles(dir) {
   const files = [];

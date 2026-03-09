@@ -21,7 +21,7 @@ RUN npm ci
 COPY src/frontend/ .
 # npm run build calls: next build && node ../../scripts/inline-css.mjs
 COPY scripts/inline-css.mjs /scripts/inline-css.mjs
-RUN npm run build
+RUN OUT_DIR=/app/out npm run build
 
 # ── Stage 2: Serve static files ──
 FROM node:20-alpine
