@@ -1,7 +1,9 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { IconX } from "@/components/icons";
 
 interface ConfirmationDialogProps {
   open: boolean;
@@ -10,6 +12,7 @@ interface ConfirmationDialogProps {
   confirmLabel: string;
   cancelLabel?: string;
   confirmVariant?: "default" | "destructive";
+  confirmIcon?: ReactNode;
   onConfirm: () => void;
   onOpenChange: (open: boolean) => void;
 }
@@ -21,6 +24,7 @@ export function ConfirmationDialog({
   confirmLabel,
   cancelLabel = "ביטול",
   confirmVariant = "destructive",
+  confirmIcon,
   onConfirm,
   onOpenChange,
 }: ConfirmationDialogProps) {
@@ -31,12 +35,14 @@ export function ConfirmationDialog({
           <DialogTitle className="text-lg font-semibold text-foreground">{title}</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground whitespace-pre-line">{description}</DialogDescription>
         </DialogHeader>
-        <DialogFooter className="gap-2 border-t px-6 py-4 sm:flex-row sm:justify-start">
-          <Button variant={confirmVariant} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="grid grid-cols-2 gap-2 border-t px-5 py-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="gap-2">
+            <IconX size={14} />
             {cancelLabel}
+          </Button>
+          <Button variant={confirmVariant} onClick={onConfirm} className="gap-2">
+            {confirmIcon}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -523,6 +523,7 @@ function SettingsContent() {
           "לא ניתן לבטל פעולה זו.",
         ].join("\n")}
         confirmLabel="אפס הכל"
+        confirmIcon={<IconTrash size={14} />}
         onConfirm={handleResetAll}
       />
 
@@ -532,6 +533,7 @@ function SettingsContent() {
         title="שינוי הגדרות עם השפעה על נתונים"
         description={impactDetails.join("\n")}
         confirmLabel="אני מבין, המשך"
+        confirmIcon={<IconAlertCircle size={14} />}
         onConfirm={() => {
           setShowImpactConfirm(false);
           void doSave(normalizeLocalSettings(currentSettings));

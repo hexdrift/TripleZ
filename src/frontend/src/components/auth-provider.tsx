@@ -156,7 +156,7 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
   }
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <main className="min-h-screen bg-background p-6">
       <div className="flex min-h-[calc(100vh-3rem)] items-center justify-center">
         <Card className="page-hero w-full max-w-[420px] overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
         <CardHeader className="flex flex-col items-center pb-0">
@@ -212,7 +212,7 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
         </CardContent>
       </Card>
       </div>
-    </div>
+    </main>
   );
 }
 

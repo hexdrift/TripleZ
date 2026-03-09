@@ -184,7 +184,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (error && rooms.length === 0 && !loading) {
     return (
-      <div className="min-h-screen bg-background p-8">
+      <main className="min-h-screen bg-background p-8">
         <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
           <Card className="w-full max-w-[460px] overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
           <CardContent className="p-8 text-center">
@@ -200,7 +200,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </CardContent>
         </Card>
         </div>
-      </div>
+      </main>
     );
   }
 
