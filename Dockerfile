@@ -21,7 +21,8 @@ COPY src/frontend/package.json src/frontend/package-lock.json* ./
 RUN npm ci
 
 COPY src/frontend/ .
-RUN npm run build
+COPY scripts/inline-css.mjs /scripts/inline-css.mjs
+RUN OUT_DIR=/app/frontend/out npm run build
 
 # ── Stage 2: Backend (also the default single-pod image) ──
 FROM python:3.11-slim AS backend
