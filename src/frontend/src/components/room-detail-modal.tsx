@@ -87,7 +87,8 @@ function roomCompatibleForPerson(
   _rankOrder?: string[],
 ): boolean {
   if (!person || !room) return false;
-  if (String(person.gender) !== String(room.gender)) return false;
+  const pg = (person.gender || "").trim();
+  if (pg && pg !== String(room.gender)) return false;
   return true;
 }
 
@@ -1621,7 +1622,8 @@ function RoomAssignForm({
     () =>
       personnel.filter((person) => {
         if (assignedIds.has(person.person_id)) return false;
-        if (person.gender !== room.gender) return false;
+        const pg = (person.gender || "").trim();
+        if (pg && pg !== room.gender) return false;
         return true;
       }),
     [assignedIds, personnel, room.gender],
