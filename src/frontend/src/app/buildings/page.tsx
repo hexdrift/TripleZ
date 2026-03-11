@@ -329,7 +329,7 @@ function BuildingContent() {
                 size="sm"
                 onClick={() => exportToExcel(
                   exportName,
-                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", "דרגת חדר", showDepartmentCol ? "זירה ייעודית" : null, "מגדר", "מספר מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
+                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", "דרגת חדר", showDepartmentCol ? "זירות" : null, "מגדר", "מספר מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
                   filteredRooms.map((r) => [
                     ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
                     String(r.room_number),

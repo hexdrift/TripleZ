@@ -12,6 +12,7 @@ const ROOM_HEADER_ALIASES: Record<string, string> = {
   "דרגת חדר": "room_rank",
   "מגדר": "gender",
   "מזהי דיירים": "occupant_ids",
+  "זירות": "designated_department",
   "זירה ייעודית": "designated_department",
   "זירה ייעודית (אופציונלי)": "designated_department",
 };

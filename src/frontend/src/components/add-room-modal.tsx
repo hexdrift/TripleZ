@@ -38,7 +38,7 @@ const TEMPLATE_COLUMNS = [
   { key: "room_rank", label: "דרגת חדר", required: true },
   { key: "gender", label: "מגדר", required: true },
   { key: "occupant_ids", label: "מזהי דיירים", required: true },
-  { key: "designated_department", label: "זירה ייעודית", required: false },
+  { key: "designated_department", label: "זירות", required: false },
 ] as const;
 
 const COLUMN_LABELS: Record<string, string> = Object.fromEntries(

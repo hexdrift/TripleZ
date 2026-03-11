@@ -107,6 +107,7 @@ ROOM_HEADER_ALIASES = {
     "דרגת חדר": "room_rank",
     "מגדר": "gender",
     "מזהי דיירים": "occupant_ids",
+    "זירות": "designated_department",
     "זירה ייעודית": "designated_department",
     "זירה ייעודית (אופציונלי)": "designated_department",
 }
@@ -118,7 +119,7 @@ ROOM_COL_HEBREW: dict[str, str] = {
     "room_rank": "דרגת חדר",
     "gender": "מגדר",
     "occupant_ids": "מזהי דיירים",
-    "designated_department": "זירה ייעודית",
+    "designated_department": "זירות",
 }
 
 
@@ -382,7 +383,7 @@ def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
         "room_number": "חדר",
         "room_gender": "מגדר חדר",
         "room_rank": "דרגת חדר",
-        "designated_department": "זירה ייעודית",
+        "designated_department": "זירות",
     })
     df = _sanitize_excel_dataframe(df)
     buf = io.BytesIO()
@@ -977,7 +978,7 @@ def set_room_department(
                 action="room_designation_set",
                 entity_type="room",
                 entity_id=f"{req.building_name}__{req.room_number}",
-                message="עודכנה זירה ייעודית לחדר",
+                message="עודכנו זירות לחדר",
                 details={"department": req.department or ""},
             )
     return SimpleOK(ok=ok, detail=err)

@@ -1036,7 +1036,7 @@ function downloadImpactExcel(impact: { personnel: Record<string, unknown>[]; roo
   if (impact.rooms.length > 0) {
     void exportToExcel(
       `חדרים_שנמחקו_${ts}`,
-      ["שם מבנה", "מספר חדר", "מספר מיטות", "דרגת חדר", "מגדר", "זירה ייעודית"],
+      ["שם מבנה", "מספר חדר", "מספר מיטות", "דרגת חדר", "מגדר", "זירות"],
       impact.rooms.map((r) => [
         String(r.building_name ?? ""),
         String(r.room_number ?? ""),

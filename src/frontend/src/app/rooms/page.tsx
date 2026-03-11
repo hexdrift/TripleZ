@@ -283,7 +283,7 @@ function RoomsContent() {
                 onClick={() =>
                   exportToExcel(
                     "חדרים",
-                    ["שם מבנה", "מספר חדר", "דרגת חדר", "זירה ייעודית", "מגדר", "מספר מיטות", "תפוסה", "מצב"],
+                    ["שם מבנה", "מספר חדר", "דרגת חדר", "זירות", "מגדר", "מספר מיטות", "תפוסה", "מצב"],
                     sortedRooms.map((room) => [
                       `${buildingHe(room.building_name)}`,
                       String(room.room_number),
