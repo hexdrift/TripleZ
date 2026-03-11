@@ -692,7 +692,7 @@ function PersonPicker({
           }}
           onFocus={() => setShowList(true)}
           className="h-11 rounded-xl border-border/70 bg-background pr-10 shadow-none"
-          placeholder="חפש לפי שם או מזהה"
+          placeholder="חפש לפי שם או מספר אישי"
           autoComplete="off"
         />
       </div>

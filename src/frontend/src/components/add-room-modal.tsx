@@ -190,6 +190,8 @@ function RoomForm({
   const [beds, setBeds] = useState<string>("");
   const [rank, setRank] = useState("");
   const [gender, setGender] = useState("");
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => { clearTimeout(timerRef.current); }, []);
 
   const buildings = settings?.buildings ?? [];
   const ranks = settings?.ranks_high_to_low ?? [];
@@ -238,7 +240,7 @@ function RoomForm({
       });
       setStatus("success"); setMessage("החדר נוסף בהצלחה");
       toast.success("החדר נוסף בהצלחה");
-      setTimeout(onDone, 1200);
+      timerRef.current = setTimeout(onDone, 1200);
     } catch (err) {
       setStatus("error"); setMessage(err instanceof Error ? err.message : String(err));
     }

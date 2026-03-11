@@ -20,7 +20,22 @@ from src.backend.settings import (
     validate_personnel_source_url,
 )
 
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+
 router = APIRouter(dependencies=[Depends(require_admin)])
+
+_HE_RANGE = range(0x0590, 0x0600)
+
+
+def _he_error(exc: Exception, fallback: str = "שגיאה בעיבוד הבקשה") -> str:
+    """Return Hebrew error msg; replace English-only exceptions with fallback."""
+    msg = str(exc).strip()
+    if msg and any(ord(ch) in _HE_RANGE for ch in msg):
+        return msg if len(msg) <= 200 else msg[:199] + "…"
+    _logger.warning("Suppressed English error: %s", msg)
+    return fallback
 
 
 def _clean_string_list(value: Any, *, field_name: str) -> list[str]:
@@ -191,7 +206,7 @@ def check_settings_impact(
     try:
         proposed = _sanitize_settings(body, replace=False)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=_he_error(exc))
 
     current = load_settings()
     removed_depts = set(current["departments"]) - set(proposed["departments"])
@@ -287,7 +302,7 @@ def update_settings(
     try:
         settings = _sanitize_settings(body, replace=False)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=_he_error(exc))
 
     settings_backup = load_settings()
     rooms_backup = store.get_all("rooms")
@@ -330,7 +345,7 @@ def update_settings(
         reload_runtime_settings()
         _restore_table("rooms", rooms_backup)
         _restore_table("personnel", personnel_backup)
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=_he_error(exc))
 
 
 @router.get("/admin/setup-package")
@@ -426,4 +441,4 @@ def import_setup_package(
         reload_runtime_settings()
         _restore_table("rooms", rooms_backup)
         _restore_table("personnel", personnel_backup)
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=_he_error(exc))

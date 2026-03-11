@@ -11,9 +11,13 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from config import (
     normalize_department,
+    normalize_department_lenient,
     normalize_gender,
+    normalize_gender_lenient,
     normalize_name,
+    normalize_name_lenient,
     normalize_rank,
+    normalize_rank_lenient,
 )
 from src.backend.settings import get_allowed_genders, get_allowed_ranks
 
@@ -208,66 +212,38 @@ class PersonnelCreate(BaseModel):
     """Schema for creating a personnel record."""
 
     person_id: str
-    full_name: str
-    department: str
-    gender: str
-    rank: str
+    full_name: str = ""
+    department: str = ""
+    gender: str = ""
+    rank: str = ""
 
     @field_validator("full_name", mode="before")
     @classmethod
     def v_full_name(_cls, v: Any) -> str:
-        """Normalize the full_name field.
-
-        Args:
-            v: Raw name value.
-
-        Returns:
-            Normalized name string.
-        """
-        return normalize_name(v)
+        """Normalize the full_name field (empty allowed)."""
+        return normalize_name_lenient(v)
 
     @field_validator("department", mode="before")
     @classmethod
     def v_department(_cls, v: Any) -> str:
-        """Normalize the department field.
-
-        Args:
-            v: Raw department value.
-
-        Returns:
-            Normalized department string.
-        """
-        return normalize_department(v)
+        """Normalize the department field (empty allowed)."""
+        return normalize_department_lenient(v)
 
     @field_validator("gender", mode="before")
     @classmethod
     def v_gender(_cls, v: Any) -> str:
-        """Normalize and validate the gender field.
-
-        Args:
-            v: Raw gender value.
-
-        Returns:
-            Normalized gender string.
-        """
-        g = normalize_gender(v)
-        if g not in get_allowed_genders():
+        """Normalize and validate the gender field (empty allowed)."""
+        g = normalize_gender_lenient(v)
+        if g and g not in get_allowed_genders():
             raise ValueError(f"מגדר חייב להיות אחד מהאפשרויות: {sorted(get_allowed_genders())}")
         return g
 
     @field_validator("rank", mode="before")
     @classmethod
     def v_rank(_cls, v: Any) -> str:
-        """Normalize and validate the rank field.
-
-        Args:
-            v: Raw rank value.
-
-        Returns:
-            Normalized rank string.
-        """
-        r = normalize_rank(v)
-        if r not in get_allowed_ranks():
+        """Normalize and validate the rank field (empty allowed)."""
+        r = normalize_rank_lenient(v)
+        if r and r not in get_allowed_ranks():
             raise ValueError(f"דרגה חייבת להיות אחת מהאפשרויות: {sorted(get_allowed_ranks())}")
         return r
 

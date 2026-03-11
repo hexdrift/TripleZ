@@ -159,7 +159,7 @@ function PersonnelContent() {
         <div className="flex flex-col gap-4 px-0">
           <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(360px,520px)_auto] lg:items-center">
             <div className="shrink-0 lg:justify-self-start">
-              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">כוח אדם</h2>
+              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">כוח אדם ({sortedRows.length})</h2>
             </div>
 
             <div className="relative w-full lg:justify-self-center">
@@ -169,7 +169,7 @@ function PersonnelContent() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isManager ? "חיפוש לפי מזהה, שם, מבנה או חדר" : "חיפוש לפי מזהה, שם, מבנה, חדר או זירה"}
+                placeholder={isManager ? "חיפוש לפי מספר אישי, שם, מבנה או חדר" : "חיפוש לפי מספר אישי, שם, מבנה, חדר או זירה"}
                 className="h-9 pr-9"
               />
             </div>
@@ -181,7 +181,7 @@ function PersonnelContent() {
                 size="sm"
                 onClick={() => exportToExcel(
                   isManager ? `כוח_אדם_${departmentLabel}` : "כוח_אדם",
-                  (isManager ? ["מזהה", "שם", "סטטוס", "מבנה", "חדר", "דרגה", "מגדר"] : ["מזהה", "שם", "סטטוס", "מבנה", "חדר", "דרגה", "זירה", "מגדר"]),
+                  (isManager ? ["מספר אישי", "שם מלא", "סטטוס", "שם מבנה", "מספר חדר", "דרגה", "מגדר"] : ["מספר אישי", "שם מלא", "סטטוס", "שם מבנה", "מספר חדר", "דרגה", "זירה", "מגדר"]),
                   sortedRows.map((p) => [
                     p.person_id,
                     p.full_name || "",
@@ -230,6 +230,16 @@ function PersonnelContent() {
       ) : null}
 
       <Card className="overflow-visible border-border/70 bg-card/90 p-0">
+        {!isManager ? (
+          <Button
+            variant="ghost"
+            className="w-full rounded-none border-b border-border/70 py-3 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+            onClick={() => setPersonnelModalOpen(true)}
+          >
+            <span className="text-[16px] leading-none">+</span>
+            הוספה או העלאת כוח אדם
+          </Button>
+        ) : null}
         {loading ? (
           <div className="py-14 text-center text-muted-foreground">טוען כוח אדם...</div>
         ) : allRows.length === 0 && activeCount === 0 && !searchQuery.trim() ? (
@@ -254,7 +264,7 @@ function PersonnelContent() {
             <Table className="text-[13px]">
               <TableHeader>
                 <TableRow className="bg-background/50">
-                  <ColumnHeader label="מזהה" sortKey="person_id" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="person_id" filterOptions={uniqueValues.person_id} filters={filters} onFilter={setColumnFilter} openFilter={openFilter} setOpenFilter={setOpenFilter} />
+                  <ColumnHeader label="מספר אישי" sortKey="person_id" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="person_id" filterOptions={uniqueValues.person_id} filters={filters} onFilter={setColumnFilter} openFilter={openFilter} setOpenFilter={setOpenFilter} />
                   <ColumnHeader label="שם" sortKey="full_name" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="full_name" filterOptions={uniqueValues.full_name} filters={filters} onFilter={setColumnFilter} openFilter={openFilter} setOpenFilter={setOpenFilter} />
                   <ColumnHeader label="סטטוס" sortKey="assignment_status" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="assignment_status" filterOptions={uniqueValues.assignment_status} filters={filters} onFilter={setColumnFilter} openFilter={openFilter} setOpenFilter={setOpenFilter} />
                   <ColumnHeader label="מבנה" sortKey="building_name" currentSort={sortKey} sortDir={sortDir} onSort={toggleSort} filterCol="building_name" filterOptions={uniqueValues.building_name} filters={filters} onFilter={setColumnFilter} openFilter={openFilter} setOpenFilter={setOpenFilter} />
@@ -304,22 +314,6 @@ function PersonnelContent() {
                     );
                   })
                 )}
-                {!isManager ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={8} className="p-0">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="default"
-                        className="h-11 w-full justify-center rounded-none border-0 bg-transparent text-black shadow-none hover:bg-accent/[0.35] hover:text-black dark:text-foreground dark:hover:text-foreground"
-                        onClick={() => setPersonnelModalOpen(true)}
-                      >
-                        <IconPlus size={14} />
-                        העלאת כוח אדם
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
               </TableBody>
             </Table>
           </div>
@@ -333,6 +327,7 @@ function PersonnelContent() {
           onUploaded={async () => {
             await refreshPersonnel(true);
           }}
+          initialView="chooser"
         />
       ) : null}
     </div>

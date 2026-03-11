@@ -37,6 +37,7 @@ export function deptHe(v: string) {
 }
 
 export function genderHe(v: string) {
+  if (!v) return v ?? "";
   return genderLabels[v.toUpperCase()] ?? v;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AuditLogEntry, getAuditLog } from "@/lib/api";
+import { AuditLogEntry, getAuditLog, clearAuditLog, deleteAuditEntry } from "@/lib/api";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,13 @@ import {
   IconSearch,
   IconUserMinus,
   IconUserPlus,
+  IconTrash,
 } from "@/components/icons";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "react-toastify";
+import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { useAppData } from "@/components/app-shell";
 
 const ACTION_LABELS: Record<string, string> = {
   personnel_sync: "סנכרון כוח אדם",
@@ -33,6 +36,12 @@ const ACTION_LABELS: Record<string, string> = {
   auto_assign: "שיבוץ אוטומטי",
   settings_update: "עדכון הגדרות",
   reset_all: "איפוס מערכת",
+  unassign: "הסרה מחדר",
+  swap: "החלפת חדרים",
+  move: "העברה בין חדרים",
+  assign_to_room: "שיבוץ ידני לחדר",
+  setup_import: "ייבוא הגדרות",
+  release_reservation: "שחרור שמירת מיטה",
 };
 
 const PUSH_ACTIONS = new Set([
@@ -52,6 +61,8 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
   rooms: "חדרים",
   settings: "הגדרות",
   room: "חדר",
+  person: "אדם",
+  saved_assignment: "שמירת מיטה",
 };
 
 const ENTITY_ID_LABELS: Record<string, string> = {
@@ -89,7 +100,19 @@ const DETAIL_KEY_LABELS: Record<string, string> = {
   total_rooms: 'סה"כ חדרים',
   target_building: 'מבנה יעד',
   target_room_number: 'חדר יעד',
-  person_id: 'מזהה אישי',
+  person_id: 'מספר אישי',
+  person_id_a: 'מספר אישי א',
+  person_id_b: 'מספר אישי ב',
+  building_name: 'מבנה',
+  room_number: 'חדר',
+  has_changes: 'בוצע שינוי',
+  removed_personnel_count: 'הוסרו מכוח אדם',
+  removed_room_count: 'חדרים שהוסרו',
+  cleared_room_designations_count: 'ייעודי חדרים שנוקו',
+  removed_unknown_occupants_count: 'שיבוצים לא ידועים שהוסרו',
+  removed_incompatible_occupants_count: 'שיבוצים לא תואמים שהוסרו',
+  removed_duplicate_assignments_count: 'שיבוצים כפולים שהוסרו',
+  trimmed_over_capacity_count: 'חריגות קיבולת שתוקנו',
 };
 
 const DETAIL_VALUE_LABELS: Record<string, string> = {
@@ -107,7 +130,7 @@ const DETAIL_VALUE_LABELS: Record<string, string> = {
 };
 
 const TABLE_COL_LABELS: Record<string, string> = {
-  person_id: 'מזהה',
+  person_id: 'מספר אישי',
   full_name: 'שם',
   department: 'מחלקה',
   gender: 'מגדר',
@@ -197,11 +220,14 @@ function buildCopyText(entry: AuditLogEntry): string {
 }
 
 export default function AuditPage() {
+  const { auth } = useAppData();
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [spinning, setSpinning] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const isAdmin = auth.role === "admin";
 
   async function load() {
     setLoading(true);
@@ -214,6 +240,26 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
       setTimeout(() => setSpinning(false), 600);
+    }
+  }
+
+  async function handleClearAll() {
+    try {
+      await clearAuditLog();
+      setEntries([]);
+      toast.success("היומן נוקה בהצלחה");
+    } catch {
+      toast.error("שגיאה בניקוי היומן");
+    }
+  }
+
+  async function handleDeleteEntry(eventId: string) {
+    try {
+      await deleteAuditEntry(eventId);
+      setEntries((prev) => prev.filter((e) => e.event_id !== eventId));
+      toast.success("הרשומה נמחקה");
+    } catch {
+      toast.error("שגיאה במחיקת הרשומה");
     }
   }
 
@@ -275,6 +321,17 @@ export default function AuditPage() {
           >
             <IconRefresh size={15} className={cn("transition-transform duration-500", spinning && "animate-spin")} />
           </Button>
+          {isAdmin && entries.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setConfirmClearOpen(true)}
+              className="shrink-0 h-8 w-8 text-muted-foreground hover:text-destructive"
+              title="נקה יומן"
+            >
+              <IconTrash size={15} />
+            </Button>
+          )}
         </div>
 
         {/* Results count */}
@@ -310,11 +367,25 @@ export default function AuditPage() {
                   else next.add(entry.event_id);
                   return next;
                 })}
+                isAdmin={isAdmin}
+                onDelete={handleDeleteEntry}
               />
             ))
           )}
         </div>
       </Card>
+      <ConfirmationDialog
+        open={confirmClearOpen}
+        title="לנקות את היומן?"
+        description="כל רשומות היומן יימחקו לצמיתות."
+        confirmLabel="נקה"
+        confirmIcon={<IconTrash size={14} />}
+        onOpenChange={setConfirmClearOpen}
+        onConfirm={() => {
+          setConfirmClearOpen(false);
+          handleClearAll();
+        }}
+      />
     </div>
   );
 }
@@ -334,7 +405,7 @@ interface ReassignedEntry {
   room_number: number;
 }
 
-function AuditRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void }) {
+function AuditRow({ entry, expanded, onToggle, isAdmin, onDelete }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void; isAdmin: boolean; onDelete: (eventId: string) => void }) {
   const [copied, setCopied] = useState(false);
   const details = entry.details || {};
   const removedOccupants = (details.removed_occupants ?? []) as RemovedOccupant[];
@@ -425,14 +496,26 @@ function AuditRow({ entry, expanded, onToggle }: { entry: AuditLogEntry; expande
           <span className="text-[11px] text-muted-foreground/70 tabular-nums">
             {formatTimestamp(entry.created_at)}
           </span>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="rounded-md p-1 text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-            title="העתק לרשומה"
-          >
-            {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="rounded-md p-1 text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+              title="העתק רשומה"
+            >
+              {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(entry.event_id); }}
+                className="rounded-md p-1 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                title="מחק רשומה"
+              >
+                <IconTrash size={13} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

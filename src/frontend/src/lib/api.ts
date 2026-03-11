@@ -1,17 +1,64 @@
 import { Room, Personnel, BuildingSummary, DepartmentSummary, GenderSummary, RankSummary } from "./types";
 import { getApiBaseUrl } from "./api-base";
 
+/** Max characters for user-facing error messages. */
+const MAX_ERROR_LENGTH = 120;
+
+/** Common Pydantic / Python error patterns → Hebrew translations. */
+const ENGLISH_ERROR_MAP: [RegExp, string][] = [
+  [/^not found$/i, "לא נמצא"],
+  [/^field required$/i, "שדה חובה חסר"],
+  [/^internal server error$/i, "שגיאת שרת"],
+  [/value is not a valid integer/i, "הערך חייב להיות מספר שלם"],
+  [/value is not a valid float/i, "הערך חייב להיות מספר"],
+  [/value is not a valid string/i, "הערך חייב להיות טקסט"],
+  [/input should be a valid integer/i, "הערך חייב להיות מספר שלם"],
+  [/input should be a valid string/i, "הערך חייב להיות טקסט"],
+  [/input should be a valid number/i, "הערך חייב להיות מספר"],
+  [/none is not an allowed value/i, "חסר ערך חובה"],
+  [/value is not none/i, "הערך אינו תקין"],
+  [/string does not match regex/i, "פורמט לא תקין"],
+  [/ensure this value has at most/i, "הערך ארוך מדי"],
+  [/ensure this value has at least/i, "הערך קצר מדי"],
+  [/ensure this value is greater than/i, "הערך קטן מדי"],
+  [/ensure this value is less than/i, "הערך גדול מדי"],
+  [/extra inputs are not permitted/i, "שדות לא מזוהים בבקשה"],
+  [/missing$/i, "שדה חובה חסר"],
+  [/permission denied/i, "אין הרשאה"],
+  [/unauthorized/i, "נדרשת התחברות"],
+  [/forbidden/i, "אין הרשאה"],
+  [/request entity too large/i, "הקובץ גדול מדי"],
+  [/unsupported media type/i, "סוג קובץ לא נתמך"],
+];
+
+function truncateMessage(msg: string): string {
+  if (msg.length <= MAX_ERROR_LENGTH) return msg;
+  return msg.slice(0, MAX_ERROR_LENGTH - 1) + "…";
+}
+
+/** True if the string contains at least one Hebrew character. */
+function hasHebrew(s: string): boolean {
+  return /[\u0590-\u05FF]/.test(s);
+}
+
+function normalizeMessage(message: string): string {
+  if (!message) return "שגיאת שרת";
+  const trimmed = message.trim();
+  if (!trimmed) return "שגיאת שרת";
+
+  // Try known English patterns
+  for (const [pattern, hebrew] of ENGLISH_ERROR_MAP) {
+    if (pattern.test(trimmed)) return hebrew;
+  }
+
+  // If no Hebrew at all, it's a raw English exception → generic message
+  if (!hasHebrew(trimmed)) return "שגיאה בעיבוד הבקשה";
+
+  return truncateMessage(trimmed);
+}
+
 function parseApiError(body: string): string {
   if (!body) return "שגיאת שרת";
-
-  const normalizeKnownEnglish = (message: string): string => {
-    if (!message) return message;
-    const trimmed = message.trim();
-    if (!trimmed) return trimmed;
-    if (/^not found$/i.test(trimmed)) return "לא נמצא";
-    if (/^field required$/i.test(trimmed)) return "שדה חובה חסר";
-    return trimmed;
-  };
 
   try {
     const parsed = JSON.parse(body) as {
@@ -19,7 +66,7 @@ function parseApiError(body: string): string {
       message?: unknown;
     };
     if (typeof parsed.detail === "string" && parsed.detail.trim()) {
-      return normalizeKnownEnglish(parsed.detail);
+      return normalizeMessage(parsed.detail);
     }
     if (Array.isArray(parsed.detail)) {
       const messages = parsed.detail
@@ -31,19 +78,21 @@ function parseApiError(body: string): string {
           }
           return "";
         })
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(normalizeMessage);
       if (messages.length > 0) {
-        return normalizeKnownEnglish(messages.join(" · "));
+        const joined = [...new Set(messages)].join(" · ");
+        return truncateMessage(joined);
       }
     }
     if (typeof parsed.message === "string" && parsed.message.trim()) {
-      return normalizeKnownEnglish(parsed.message);
+      return normalizeMessage(parsed.message);
     }
   } catch {
     // ignore JSON parse failures and fall back to raw text
   }
 
-  return normalizeKnownEnglish(body);
+  return normalizeMessage(body);
 }
 
 function parseNetworkError(error: unknown): string {
@@ -449,6 +498,14 @@ export async function runPersonnelSyncNow(): Promise<{
 
 export async function getAuditLog(limit = 50): Promise<{ items: AuditLogEntry[] }> {
   return fetchJSON(`/admin/audit-log?limit=${limit}`);
+}
+
+export async function clearAuditLog(): Promise<{ ok: boolean }> {
+  return fetchJSON("/admin/audit-log", { method: "DELETE" });
+}
+
+export async function deleteAuditEntry(eventId: string): Promise<{ ok: boolean }> {
+  return fetchJSON(`/admin/audit-log/${encodeURIComponent(eventId)}`, { method: "DELETE" });
 }
 
 export function departmentSummaries(rooms: Room[]): DepartmentSummary[] {

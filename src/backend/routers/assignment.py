@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.backend.access import person_visible_to_session, room_visible_to_department
-from src.backend.auth_session import AuthSession, require_admin, require_authenticated
+from src.backend.auth_session import AuthSession, require_authenticated
 from src.backend.dependencies import bump_version, core, get_data_version, mutation_lock, store
 from src.backend.runtime_meta import append_audit_event
 from src.backend.schemas import (
@@ -72,7 +72,7 @@ def _room_snapshot(building_name: str, room_number: int) -> dict | None:
 @router.post("/unassign", response_model=SimpleOK)
 def unassign(
     req: UnassignRequest,
-    session: AuthSession = Depends(require_admin),
+    session: AuthSession = Depends(require_authenticated),
 ) -> SimpleOK:
     """Remove a person's room assignment.
 
@@ -84,6 +84,10 @@ def unassign(
     """
     with mutation_lock():
         _assert_expected_version(req.expected_version)
+        if session.role == "manager":
+            person = store.get_by_id("personnel", str(req.person_id))
+            if not person_visible_to_session(session, person):
+                raise HTTPException(status_code=403, detail="אין הרשאה להסיר אדם מזירה אחרת")
         ok = core.unassign(person_id=req.person_id)
         if ok:
             bump_version()
@@ -97,7 +101,7 @@ def unassign(
                 entity_id=req.person_id,
                 message="אדם הוסר מהחדר",
             )
-    return SimpleOK(ok=ok, detail=None if ok else "המזהה אינו משובץ כרגע לחדר")
+    return SimpleOK(ok=ok, detail=None if ok else "המספר האישי אינו משובץ כרגע לחדר")
 
 
 @router.post("/swap", response_model=SimpleOK)

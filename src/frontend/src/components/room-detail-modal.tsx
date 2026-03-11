@@ -30,6 +30,7 @@ import {
   IconGender,
   IconCheck,
   IconTrash,
+  IconRefresh,
 } from "./icons";
 
 import {
@@ -91,8 +92,10 @@ function roomCompatibleForPerson(
 }
 
 export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
-  const { rooms, personnel, auth } = useAppData();
+  const { rooms, personnel, auth, dataVersion } = useAppData();
   const [selectedBed, setSelectedBed] = useState<number | null>(null);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [view, setView] = useState<ModalView>(
     auth.role === "admin" ? "chooser" : "assignments",
   );
@@ -156,6 +159,35 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     setView("assignments");
   }, [auth.role, view]);
 
+  async function handleResetRoom() {
+    if (!liveRoom) return;
+    setResetting(true);
+    try {
+      const idsToUnassign = isManager
+        ? liveRoom.occupant_ids.filter((id) => {
+            const p = personnelMap.get(id);
+            return p?.department === managerDept;
+          })
+        : [...liveRoom.occupant_ids];
+      const reservedToRelease = isManager
+        ? (liveRoom.reserved_persons || []).filter((rp) => rp.department === managerDept)
+        : (liveRoom.reserved_persons || []);
+
+      for (const pid of idsToUnassign) {
+        await unassignPerson(pid, dataVersion);
+      }
+      for (const rp of reservedToRelease) {
+        await releaseSavedAssignment(rp.person_id);
+      }
+      toast.success(`חדר ${liveRoom.room_number} אופס בהצלחה`);
+      setSelectedBed(null);
+    } catch {
+      toast.error("שגיאה באיפוס החדר");
+    } finally {
+      setResetting(false);
+    }
+  }
+
   if (!liveRoom) return null;
 
   const primaryDept = liveRoom.departments[0] || "";
@@ -191,6 +223,8 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
   const roomIsAssignable = isManager
     ? isRoomAssignableByManager(liveRoom, managerDept, personnelMap)
     : true;
+  const hasOccupantsOrReserved = liveRoom.occupant_ids.length > 0 || (liveRoom.reserved_persons?.length ?? 0) > 0;
+  const canReset = hasOccupantsOrReserved && (isAdmin || (isManager && roomIsAssignable));
   const showBack = view === "detail" || (isAdmin && view !== "chooser");
 
   const modalTitle =
@@ -255,6 +289,18 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
               </DialogHeader>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {canReset && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setConfirmResetOpen(true)}
+                  disabled={resetting}
+                  aria-label="איפוס חדר"
+                  className="rounded-lg text-muted-foreground hover:text-destructive"
+                >
+                  <IconRefresh size={18} />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -457,6 +503,18 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
           </AnimatePresence>
         </div>
       </DialogContent>
+      <ConfirmationDialog
+        open={confirmResetOpen}
+        title="לאפס את החדר?"
+        description={`כל השיבוצים והשמירות בחדר ${liveRoom.room_number} יוסרו.`}
+        confirmLabel="אפס"
+        confirmIcon={<IconRefresh size={14} />}
+        onOpenChange={setConfirmResetOpen}
+        onConfirm={() => {
+          setConfirmResetOpen(false);
+          handleResetRoom();
+        }}
+      />
     </Dialog>
   );
 }
@@ -871,7 +929,7 @@ function ReservedBedDetail({
       <p className="text-[11px] text-muted-foreground">
         מיטה זו שמורה עבור אדם זה. כשיופיע בעדכון כוח אדם הבא, הוא ישובץ חזרה אוטומטית.
       </p>
-      {auth.role === "admin" && (
+      {(auth.role === "admin" || (auth.role === "manager" && department === auth.department)) && (
         <Button
           variant="outline"
           size="sm"
@@ -986,7 +1044,7 @@ function OccupantDetail({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          <InfoRow label="מזהה" value={personId} />
+          <InfoRow label="מספר אישי" value={personId} />
           {person ? (
             <>
               <InfoRow label="זירה" value={deptHe(person.department)} />
@@ -1003,7 +1061,7 @@ function OccupantDetail({
           חדר זה מנוהל על ידי מנהל מערכת בלבד — לא ניתן לבצע פעולות.
         </p>
       ) : (
-        <div className={cn("grid gap-2", auth.role === "admin" ? "grid-cols-3" : "grid-cols-2")}>
+        <div className={cn("grid gap-2", (auth.role === "admin" || (auth.role === "manager" && person?.department === managerDept)) ? "grid-cols-3" : "grid-cols-2")}>
           <ActionButton
             active={action === "swap"}
             icon={<IconSwap size={14} />}
@@ -1016,7 +1074,7 @@ function OccupantDetail({
             label="העבר"
             onClick={() => toggleAction("move")}
           />
-          {auth.role === "admin" ? (
+          {(auth.role === "admin" || (auth.role === "manager" && person?.department === managerDept)) ? (
             <ActionButton
               active={false}
               icon={<IconUserMinus size={14} />}
@@ -1341,7 +1399,7 @@ function InlineSwap({
             ) : (
               <div className="rounded-xl border border-border/70 bg-popover/95 px-3 py-3 text-[11px] text-muted-foreground shadow-lg backdrop-blur-sm">
                 <p className="font-semibold text-foreground">לא נמצאו תוצאות</p>
-                <p className="mt-1 leading-5">אפשר לחפש לפי שם, מזהה או חדר נוכחי.</p>
+                <p className="mt-1 leading-5">אפשר לחפש לפי שם, מספר אישי או חדר נוכחי.</p>
               </div>
             )
           ) : null}
@@ -1683,7 +1741,7 @@ function RoomAssignForm({
               setShowSuggestions(true);
             }}
             onFocus={() => setShowSuggestions(true)}
-            placeholder="הקלד מזהה או שם לחיפוש"
+            placeholder="הקלד מספר אישי או שם לחיפוש"
             autoComplete="off"
           />
           {showSuggestions ? (
@@ -1759,8 +1817,8 @@ function RoomAssignForm({
       {notInPersonnel ? (
         <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
           {auth.role === "manager"
-            ? `המזהה לא נמצא ברשימת כוח האדם של זירת ${deptHe(auth.department || "")}.`
-            : "המזהה לא נמצא ברשימת כוח האדם."}
+            ? `המספר האישי לא נמצא ברשימת כוח האדם של זירת ${deptHe(auth.department || "")}.`
+            : "המספר האישי לא נמצא ברשימת כוח האדם."}
           {personnelUrl ? (
             <>
               {" "}

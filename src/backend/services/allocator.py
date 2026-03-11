@@ -22,9 +22,13 @@ from config import (
     ROOM_ID_COLS,
     normalize_building,
     normalize_department,
+    normalize_department_lenient,
     normalize_gender,
+    normalize_gender_lenient,
     normalize_name,
+    normalize_name_lenient,
     normalize_rank,
+    normalize_rank_lenient,
 )
 from src.backend.settings import (
     get_allowed_buildings,
@@ -85,7 +89,7 @@ class RoomAllocatorCore:
     REQUIRED_PERSONNEL_COLS = ("person_id", "full_name", "department", "gender", "rank")
 
     PERSONNEL_COL_HEBREW: dict[str, str] = {
-        "person_id": "מזהה",
+        "person_id": "מספר אישי",
         "full_name": "שם מלא",
         "department": "זירה",
         "gender": "מגדר",
@@ -171,27 +175,33 @@ class RoomAllocatorCore:
         Raises:
             ValueError: If required columns are missing or field values are invalid.
         """
-        missing = [c for c in self.REQUIRED_PERSONNEL_COLS if c not in personnel_df.columns]
-        if missing:
-            missing_he = [self.PERSONNEL_COL_HEBREW.get(c, c) for c in missing]
-            raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing_he}")
+        if "person_id" not in personnel_df.columns:
+            raise ValueError("חסרה עמודת מספר אישי (person_id) בטבלת כוח האדם")
+
+        # Fill missing optional columns with empty string
+        for col in ("full_name", "department", "gender", "rank"):
+            if col not in personnel_df.columns:
+                personnel_df[col] = ""
 
         rows_to_insert: List[dict] = []
         seen_person_ids: set[str] = set()
 
         for _, row in personnel_df.iterrows():
-            pid = str(row["person_id"])
+            pid = str(row["person_id"]).strip()
+            if not pid or pid.lower() == "nan":
+                continue
             if pid in seen_person_ids:
-                raise ValueError(f"מזהה אדם כפול '{pid}' בנתוני כוח האדם.")
+                raise ValueError(f"מספר אישי כפול '{pid}' בנתוני כוח האדם.")
             seen_person_ids.add(pid)
-            name = normalize_name(row["full_name"])
-            dept = normalize_department(row["department"])
-            gender = normalize_gender(row["gender"])
-            rank = normalize_rank(row["rank"])
+            name = normalize_name_lenient(row["full_name"])
+            dept = normalize_department_lenient(row["department"])
+            gender = normalize_gender_lenient(row["gender"])
+            rank = normalize_rank_lenient(row["rank"])
 
-            self.rank_policy.validate_rank(rank)
-            if gender not in get_allowed_genders():
-                raise ValueError(f"מגדר לא תקין '{gender}' עבור מזהה אדם {pid}.")
+            if rank:
+                self.rank_policy.validate_rank(rank)
+            if gender and gender not in get_allowed_genders():
+                raise ValueError(f"מגדר לא תקין '{gender}' עבור מספר אישי {pid}.")
 
             rows_to_insert.append({
                 "person_id": pid,
@@ -239,7 +249,7 @@ class RoomAllocatorCore:
         if not rank or not department or not gender:
             return None, {
                 "error_code": "MISSING_FIELDS",
-                "error_message": f"חובה לספק דרגה, זירה ומגדר (מזהה {pid} לא נמצא ברשומות כוח האדם).",
+                "error_message": f"חובה לספק דרגה, זירה ומגדר (מספר אישי {pid} לא נמצא ברשומות כוח האדם).",
             }
 
         rank_n = normalize_rank(rank)
@@ -820,10 +830,13 @@ class RoomAllocatorCore:
 
         invalid_person_ids: set[str] = set()
         for person in self._store.get_all("personnel"):
+            dept = str(person.get("department") or "").strip()
+            gender = str(person.get("gender") or "").strip()
+            rank = str(person.get("rank") or "").strip()
             if (
-                person["department"] not in allowed_departments
-                or person["gender"] not in allowed_genders
-                or person["rank"] not in allowed_ranks
+                (dept and dept not in allowed_departments)
+                or (gender and gender not in allowed_genders)
+                or (rank and rank not in allowed_ranks)
             ):
                 invalid_person_ids.add(str(person["person_id"]))
 
@@ -1211,7 +1224,7 @@ class RoomAllocatorCore:
                 if personnel_by_id is not None:
                     person = personnel_by_id.get(person_id)
                     if person is None:
-                        raise ValueError(f"בחדר {room_label} קיים מזהה אדם לא מוכר '{person_id}'.")
+                        raise ValueError(f"בחדר {room_label} קיים מספר אישי לא מוכר '{person_id}'.")
                     compatibility_error = self._room_person_compatibility_error(room, person)
                     if compatibility_error:
                         raise ValueError(f"בחדר {room_label}: {compatibility_error}")
@@ -1242,10 +1255,17 @@ class RoomAllocatorCore:
             A Hebrew error string if the person is incompatible with the
             room, or ``None`` if compatible.
         """
-        if str(person["gender"]) != str(room["gender"]):
+        person_gender = str(person.get("gender") or "").strip()
+        room_gender = str(room.get("gender") or "").strip()
+
+        # Skip gender check if person has no gender set
+        if not person_gender:
+            return None
+
+        if person_gender != room_gender:
             return (
-                f"לאדם {person['person_id']} מגדר '{person['gender']}' "
-                f"שאינו תואם למגדר החדר '{room['gender']}'."
+                f"לאדם {person['person_id']} מגדר '{person_gender}' "
+                f"שאינו תואם למגדר החדר '{room_gender}'."
             )
 
         return None

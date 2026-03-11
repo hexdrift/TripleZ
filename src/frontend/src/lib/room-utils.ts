@@ -38,19 +38,21 @@ export function isRoomVisibleToManagerWithMap(
 
 /**
  * Check if a manager can assign people to empty beds in this room.
- * Requires BOTH:
- * 1. All current occupants are from the manager's department (single-dept)
- * 2. Room is mostly filled: occupant_count >= ceil(number_of_beds * 2/3)
- *
- * Empty rooms designated to dept are NOT assignable by managers (admin-only).
+ * Allowed when:
+ * - Room is designated to the manager's department, OR
+ * - All current occupants are from the manager's department AND
+ *   room is mostly filled: occupant_count >= ceil(number_of_beds * 2/3)
  */
 export function isRoomAssignableByManager(
   room: Room,
   dept: string,
   personnelMap: Map<string, Personnel>,
 ): boolean {
-  if (room.occupant_ids.length === 0) return false;
   if (room.available_beds <= 0) return false;
+
+  if (room.designated_department === dept) return true;
+
+  if (room.occupant_ids.length === 0) return false;
 
   const threshold = Math.ceil(room.number_of_beds * 2 / 3);
   if (room.occupant_count < threshold) return false;

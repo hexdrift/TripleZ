@@ -214,6 +214,60 @@ def normalize_department(value: Any) -> str:
     raise ValueError(f"זירה לא תקינה '{s}'. ערכים מותרים: {sorted(allowed)}")
 
 
+# -- Lenient variants: return "" for missing/empty, skip strict validation --
+
+def normalize_rank_lenient(value: Any) -> str:
+    """Like normalize_rank but returns '' for missing/empty values."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    allowed = get_allowed_ranks()
+    for candidate in _candidate_values(s, _RANK_ALIASES):
+        if candidate in allowed:
+            return candidate
+    return s
+
+
+def normalize_gender_lenient(value: Any) -> str:
+    """Like normalize_gender but returns '' for missing/empty values."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    allowed = get_allowed_genders()
+    for candidate in _candidate_values(s, _GENDER_ALIASES):
+        if candidate in allowed:
+            return candidate
+    return s.upper()
+
+
+def normalize_department_lenient(value: Any) -> str:
+    """Like normalize_department but returns '' for missing/empty values."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if not s or s.lower() == "nan":
+        return ""
+    allowed = get_allowed_departments()
+    for candidate in _candidate_values(s, _DEPARTMENT_ALIASES):
+        if candidate in allowed:
+            return candidate
+    return s
+
+
+def normalize_name_lenient(value: Any) -> str:
+    """Like normalize_name but returns '' for missing/empty values."""
+    if value is None:
+        return ""
+    s = str(value).strip()
+    if s.lower() == "nan":
+        return ""
+    return s
+
+
 def normalize_building(value: Any) -> str:
     """Normalize a building name and validate against allowed buildings.
 

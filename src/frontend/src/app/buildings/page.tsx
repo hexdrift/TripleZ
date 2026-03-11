@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 
 const AddRoomModal = dynamic(
   () => import("@/components/add-room-modal").then((module) => module.AddRoomModal),
@@ -180,6 +180,8 @@ function BuildingContent() {
           roomStatusHe(room),
           String(room.number_of_beds),
           String(room.occupant_count),
+          ...room.occupant_ids,
+          ...Object.values(room.occupant_names || {}),
         ];
         return searchableValues.some((v) => v.toLocaleLowerCase("he").includes(query));
       });
@@ -303,33 +305,31 @@ function BuildingContent() {
 
       <Card className="page-hero mb-6 overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80 p-7">
         <div className="flex flex-col gap-4 px-0">
-          <div className={isManager ? "flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(360px,520px)_auto] lg:items-center" : "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"}>
-            <div className={isManager ? "shrink-0 lg:justify-self-start" : "space-y-1"}>
-              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">{breadcrumbLabel}</h2>
+          <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(360px,520px)_auto] lg:items-center">
+            <div className="shrink-0 lg:justify-self-start">
+              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">{breadcrumbLabel} ({filteredRooms.length})</h2>
             </div>
 
-            {isManager ? (
-              <div className="relative w-full lg:justify-self-center">
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  <IconSearch size={14} />
-                </div>
-                <Input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="חיפוש לפי מבנה, חדר, דרגה או מגדר"
-                  className="h-9 pr-9"
-                />
+            <div className="relative w-full lg:justify-self-center">
+              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <IconSearch size={14} />
               </div>
-            ) : null}
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="חיפוש לפי מבנה, חדר, דרגה, מגדר, שם או מספר אישי"
+                className="h-9 pr-9"
+              />
+            </div>
 
-            <div className={isManager ? "flex lg:justify-self-end" : undefined}>
+            <div className="flex lg:justify-self-end">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 onClick={() => exportToExcel(
                   exportName,
-                  [showBuildingCol ? "מבנה" : null, "חדר", "דרגה", showDepartmentCol ? "זירות" : null, "מגדר", "מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
+                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", "דרגת חדר", showDepartmentCol ? "זירה ייעודית" : null, "מגדר", "מספר מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
                   filteredRooms.map((r) => [
                     ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
                     String(r.room_number),

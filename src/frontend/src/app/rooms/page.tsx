@@ -124,6 +124,8 @@ function RoomsContent() {
         roomStatusHe(room),
         ...room.departments,
         ...room.departments.map(deptHe),
+        ...room.occupant_ids,
+        ...Object.values(room.occupant_names || {}),
       ];
 
       return searchableValues.some((value) => value.toLocaleLowerCase("he").includes(query));
@@ -258,7 +260,7 @@ function RoomsContent() {
         <div className="flex flex-col gap-4 px-0">
           <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[auto_minmax(360px,520px)_auto] lg:items-center">
             <div className="shrink-0 lg:justify-self-start">
-              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">חדרים</h2>
+              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">חדרים ({sortedRooms.length})</h2>
             </div>
 
             <div className="relative w-full lg:justify-self-center">
@@ -268,7 +270,7 @@ function RoomsContent() {
               <Input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="חיפוש לפי מבנה, חדר, דרגה, זירה או מגדר"
+                placeholder="חיפוש לפי מבנה, חדר, דרגה, זירה, מגדר, שם או מספר אישי"
                 className="h-9 pr-9"
               />
             </div>
@@ -281,7 +283,7 @@ function RoomsContent() {
                 onClick={() =>
                   exportToExcel(
                     "חדרים",
-                    ["מבנה", "חדר", "דרגה", "זירות", "מגדר", "מיטות", "תפוסה", "מצב"],
+                    ["שם מבנה", "מספר חדר", "דרגת חדר", "זירה ייעודית", "מגדר", "מספר מיטות", "תפוסה", "מצב"],
                     sortedRooms.map((room) => [
                       `${buildingHe(room.building_name)}`,
                       String(room.room_number),
@@ -349,6 +351,16 @@ function RoomsContent() {
         </Card>
       ) : (
         <Card className="overflow-visible border-border/70 bg-card/90 p-0">
+          {auth.role === "admin" ? (
+            <Button
+              variant="ghost"
+              className="w-full rounded-none border-b border-border/70 py-3 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
+              onClick={() => setAddRoomOpen(true)}
+            >
+              <span className="text-[16px] leading-none">+</span>
+              הוספה או העלאת חדרים
+            </Button>
+          ) : null}
           <div className="overflow-x-auto">
             <Table className="text-[13px]">
               <TableHeader>
@@ -467,20 +479,6 @@ function RoomsContent() {
                     onClick={() => setSelectedRoomKey(`${room.building_name}-${room.room_number}`)}
                   />
                 ))}
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="p-0">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="default"
-                      className="h-11 w-full justify-center rounded-none border-0 bg-transparent text-black shadow-none hover:bg-accent/[0.35] hover:text-black dark:text-foreground dark:hover:text-foreground"
-                      onClick={() => setAddRoomOpen(true)}
-                    >
-                      <IconPlus size={14} />
-                      הוספה או העלאת חדרים
-                    </Button>
-                  </TableCell>
-                </TableRow>
               </TableBody>
             </Table>
           </div>

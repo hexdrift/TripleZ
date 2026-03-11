@@ -16,10 +16,15 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from config import (
     model_to_dict,
     normalize_department,
+    normalize_department_lenient,
     normalize_gender,
+    normalize_gender_lenient,
     normalize_name,
+    normalize_name_lenient,
     normalize_rank,
+    normalize_rank_lenient,
 )
+from src.backend.access import person_visible_to_session
 from src.backend.auth_session import AuthSession, require_admin, require_admin_or_api_key, require_authenticated
 from src.backend.dependencies import bump_version, core, get_data_version, mutation_lock, store
 from src.backend.runtime_meta import (
@@ -43,13 +48,37 @@ logger = logging.getLogger(__name__)
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
+_HE_RANGE = range(0x0590, 0x0600)
+
+
+def _has_hebrew(text: str) -> bool:
+    """Check if text contains any Hebrew character."""
+    return any(ord(ch) in _HE_RANGE for ch in text)
+
+
+def _he_error(exc: Exception, fallback: str = "שגיאה בעיבוד הבקשה") -> str:
+    """Return the exception message if it contains Hebrew, otherwise a fallback.
+
+    Args:
+        exc: The caught exception.
+        fallback: Hebrew message to use when the original is English-only.
+
+    Returns:
+        A user-facing Hebrew error message.
+    """
+    msg = str(exc).strip()
+    if msg and _has_hebrew(msg):
+        return msg if len(msg) <= 200 else msg[:199] + "…"
+    logger.warning("Suppressed English error: %s", msg)
+    return fallback
+
 PERSONNEL_HEADER_ALIASES = {
     "person_id": "person_id",
     "full_name": "full_name",
     "department": "department",
     "gender": "gender",
     "rank": "rank",
-    "מזהה": "person_id",
+    "מספר אישי": "person_id",
     "שם מלא": "full_name",
     "זירה": "department",
     "מגדר": "gender",
@@ -57,7 +86,7 @@ PERSONNEL_HEADER_ALIASES = {
 }
 
 PERSONNEL_COL_HEBREW: dict[str, str] = {
-    "person_id": "מזהה",
+    "person_id": "מספר אישי",
     "full_name": "שם מלא",
     "department": "זירה",
     "gender": "מגדר",
@@ -131,26 +160,30 @@ def _normalize_rooms_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 def _normalize_personnel_records(df: pd.DataFrame) -> list[dict]:
     """Normalize imported personnel rows into canonical records."""
     normalized = _normalize_personnel_dataframe(df)
-    required_columns = list(core.REQUIRED_PERSONNEL_COLS)
-    missing = [column for column in required_columns if column not in normalized.columns]
-    if missing:
-        missing_he = [PERSONNEL_COL_HEBREW.get(c, c) for c in missing]
-        raise ValueError(f"חסרות עמודות נדרשות בטבלת כוח האדם: {missing_he}")
+    if "person_id" not in normalized.columns:
+        raise ValueError("חסרה עמודת מספר אישי (person_id) בטבלת כוח האדם")
+
+    # Fill missing optional columns with empty string
+    for col in ("full_name", "department", "gender", "rank"):
+        if col not in normalized.columns:
+            normalized[col] = ""
 
     records: list[dict] = []
     seen_person_ids: set[str] = set()
 
     for _, row in normalized.iterrows():
         person_id = str(row["person_id"]).strip()
+        if not person_id or person_id.lower() == "nan":
+            continue
         if person_id in seen_person_ids:
-            raise ValueError(f"מזהה אדם כפול '{person_id}' בנתוני כוח האדם.")
+            raise ValueError(f"מספר אישי כפול '{person_id}' בנתוני כוח האדם.")
         seen_person_ids.add(person_id)
         records.append({
             "person_id": person_id,
-            "full_name": normalize_name(row["full_name"]),
-            "department": normalize_department(row["department"]),
-            "gender": normalize_gender(row["gender"]),
-            "rank": normalize_rank(row["rank"]),
+            "full_name": normalize_name_lenient(row["full_name"]),
+            "department": normalize_department_lenient(row["department"]),
+            "gender": normalize_gender_lenient(row["gender"]),
+            "rank": normalize_rank_lenient(row["rank"]),
         })
 
     return records
@@ -344,7 +377,7 @@ def _build_unknown_personnel_excel(unknown_personnel: list[dict]) -> str:
     """Build an Excel file from unknown personnel and return as base64 string."""
     df = pd.DataFrame(unknown_personnel)
     df = df.rename(columns={
-        "person_id": "מזהה",
+        "person_id": "מספר אישי",
         "building_name": "מבנה",
         "room_number": "חדר",
         "room_gender": "מגדר חדר",
@@ -401,7 +434,7 @@ def _build_removed_occupants_excel(removed: list[dict]) -> str:
     """Build an Excel file from removed occupants and return as base64 string."""
     df = pd.DataFrame(removed)
     df = df.rename(columns={
-        "person_id": "מזהה",
+        "person_id": "מספר אישי",
         "full_name": "שם מלא",
         "department": "זירה",
         "gender": "מגדר",
@@ -703,7 +736,7 @@ def run_personnel_sync_from_configured_source(
     )
     return result
 
-router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin_or_api_key)])
 
 
 @router.post("/load_rooms")
@@ -722,9 +755,10 @@ def admin_load_rooms(
     try:
         df = pd.DataFrame([model_to_dict(r) for r in req.rooms])
         unknown = _validate_occupant_ids(df)
-        core.load_rooms(df)
-        _purge_orphan_saved_assignments()
-        bump_version()
+        with mutation_lock():
+            core.load_rooms(df)
+            _purge_orphan_saved_assignments()
+            bump_version()
         warnings = _build_warnings(unknown)
         append_audit_event(
             store,
@@ -737,8 +771,10 @@ def admin_load_rooms(
             details={"count": len(df), "warnings": warnings.get("warnings", {})},
         )
         return {"ok": True, **warnings}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/upsert_rooms")
@@ -777,7 +813,7 @@ def admin_upsert_rooms(
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/load_personnel")
@@ -827,7 +863,7 @@ def admin_load_personnel(
             response["auto_reassigned"] = result["auto_reassigned"]
         return response
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/create_personnel", response_model=SimpleOK)
@@ -838,11 +874,11 @@ def admin_create_personnel(
     """Create a single personnel record without replacing existing data."""
     person_id = str(req.person_id).strip()
     if not person_id:
-        raise HTTPException(status_code=400, detail="יש להזין מזהה אדם")
+        raise HTTPException(status_code=400, detail="יש להזין מספר אישי")
 
     existing = store.get_by_id("personnel", person_id)
     if existing is not None:
-        raise HTTPException(status_code=400, detail=f"מזהה {person_id} כבר קיים")
+        raise HTTPException(status_code=400, detail=f"מספר אישי {person_id} כבר קיים")
 
     try:
         row = model_to_dict(req)
@@ -861,7 +897,7 @@ def admin_create_personnel(
         )
         return SimpleOK(ok=True)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/upload_rooms")
@@ -894,9 +930,10 @@ async def upload_rooms_file(
             df["occupant_ids"] = [[] for _ in range(len(df))]
 
         unknown = _validate_occupant_ids(df)
-        core.load_rooms(df)
-        _purge_orphan_saved_assignments()
-        bump_version()
+        with mutation_lock():
+            core.load_rooms(df)
+            _purge_orphan_saved_assignments()
+            bump_version()
         warnings = _build_warnings(unknown)
         append_audit_event(
             store,
@@ -909,8 +946,10 @@ async def upload_rooms_file(
             details={"count": len(df), "warnings": warnings.get("warnings", {})},
         )
         return {"ok": True, "count": len(df), **warnings}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/set_room_department", response_model=SimpleOK)
@@ -931,16 +970,16 @@ def set_room_department(
         ok, err = core.set_room_department(req.building_name, req.room_number, req.department)
         if ok:
             bump_version()
-        append_audit_event(
-            store,
-            actor_role=session.role,
-            actor_department=_actor_department(session),
-            action="room_designation_set",
-            entity_type="room",
-            entity_id=f"{req.building_name}__{req.room_number}",
-            message="עודכנה זירה ייעודית לחדר",
-            details={"department": req.department or ""},
-        )
+            append_audit_event(
+                store,
+                actor_role=session.role,
+                actor_department=_actor_department(session),
+                action="room_designation_set",
+                entity_type="room",
+                entity_id=f"{req.building_name}__{req.room_number}",
+                message="עודכנה זירה ייעודית לחדר",
+                details={"department": req.department or ""},
+            )
     return SimpleOK(ok=ok, detail=err)
 
 
@@ -989,7 +1028,7 @@ def auto_assign(
         )
         return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/load_personnel_from_url")
@@ -1019,9 +1058,9 @@ def load_personnel_from_url(
             "changed": result["changed"],
         }
     except requests.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"שגיאה בטעינה מ-URL: {e}")
+        raise HTTPException(status_code=400, detail="שגיאה בטעינה מ-URL")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.post("/upload_personnel")
@@ -1077,8 +1116,10 @@ async def upload_personnel_file(
         if result.get("auto_reassigned"):
             response["auto_reassigned"] = result["auto_reassigned"]
         return response
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.get("/personnel-sync-status")
@@ -1130,9 +1171,9 @@ def run_personnel_sync_now(
             "sync_status": get_sync_status(store),
         }
     except requests.RequestException as e:
-        raise HTTPException(status_code=400, detail=f"שגיאה בטעינה מ-URL: {e}")
+        raise HTTPException(status_code=400, detail="שגיאה בטעינה מ-URL")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=_he_error(e))
 
 
 @router.get("/audit-log")
@@ -1152,15 +1193,38 @@ def get_audit_log(
     return {"items": list_audit_events(store, limit=max(1, min(limit, 200)))}
 
 
+@router.delete("/audit-log", response_model=SimpleOK)
+def clear_audit_log(session: AuthSession = Depends(require_admin)) -> SimpleOK:
+    """Delete all audit log entries."""
+    del session
+    store.delete_all("audit_log")
+    return SimpleOK(ok=True)
+
+
+@router.delete("/audit-log/{event_id}", response_model=SimpleOK)
+def delete_audit_entry(event_id: str, session: AuthSession = Depends(require_admin)) -> SimpleOK:
+    """Delete a single audit log entry."""
+    del session
+    existing = store.get_by_id("audit_log", event_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="רשומה לא נמצאה")
+    store.delete("audit_log", event_id)
+    return SimpleOK(ok=True)
+
+
 @router.delete("/saved-assignment/{person_id}", response_model=SimpleOK)
 def release_saved_assignment(
     person_id: str,
-    session: AuthSession = Depends(require_admin),
+    session: AuthSession = Depends(require_authenticated),
 ) -> SimpleOK:
     """Remove a saved assignment (release bed reservation)."""
     existing = store.get_by_id("saved_assignments", person_id)
     if existing is None:
-        raise HTTPException(status_code=404, detail="לא נמצאה שמירה עבור מזהה זה")
+        raise HTTPException(status_code=404, detail="לא נמצאה שמירה עבור מספר אישי זה")
+    if session.role == "manager":
+        person = store.get_by_id("personnel", person_id)
+        if not person_visible_to_session(session, person):
+            raise HTTPException(status_code=403, detail="אין הרשאה לשחרר שמירה עבור זירה אחרת")
     store.delete("saved_assignments", person_id)
     bump_version()
     append_audit_event(

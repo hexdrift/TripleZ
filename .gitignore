@@ -49,6 +49,7 @@ playwright-report/
 .playwright-mcp/
 
 # PyInstaller
+dist/
 *.spec
 !app.spec
 
