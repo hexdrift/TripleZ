@@ -115,22 +115,20 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     return () => { active = false; };
   }, []);
 
+  const roomKey = room ? `${room.building_name}-${room.room_number}` : null;
+
   const liveRoom = useMemo(() => {
-    if (!room) return null;
-    return (
-      rooms.find(
-        (r) =>
-          r.building_name === room.building_name &&
-          r.room_number === room.room_number,
-      ) || null
-    );
-  }, [rooms, room]);
+    if (!roomKey) return null;
+    return rooms.find(
+      (r) => `${r.building_name}-${r.room_number}` === roomKey,
+    ) || null;
+  }, [rooms, roomKey]);
 
   useEffect(() => {
-    if (!room) return;
+    if (!roomKey) return;
     setSelectedBed(null);
     setView(auth.role === "admin" ? "chooser" : "assignments");
-  }, [auth.role, room]);
+  }, [auth.role, roomKey]);
 
   // Reset selection if SSE update makes the selected bed index out of bounds
   useEffect(() => {
