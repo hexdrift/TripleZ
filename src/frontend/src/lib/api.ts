@@ -300,8 +300,6 @@ export interface SetupPackage {
   version: number;
   exported_at: string;
   settings: AppSettings;
-  rooms: SetupRoom[];
-  personnel: Personnel[];
 }
 
 export interface IntegrityReport {
@@ -358,14 +356,16 @@ export async function getSetupPackage(): Promise<SetupPackage> {
 export async function importSetupPackage(setupPackage: SetupPackage): Promise<{
   ok: boolean;
   settings: AppSettings;
-  personnel_count: number;
-  room_count: number;
   integrity_report?: IntegrityReport;
 }> {
   return fetchJSON("/admin/setup-package", {
     method: "POST",
     body: JSON.stringify(setupPackage),
   });
+}
+
+export async function resetData(): Promise<{ ok: boolean }> {
+  return fetchJSON("/admin/reset-data", { method: "POST" });
 }
 
 export async function resetAll(): Promise<{ ok: boolean }> {

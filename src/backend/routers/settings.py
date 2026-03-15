@@ -350,18 +350,16 @@ def update_settings(
 
 @router.get("/admin/setup-package")
 def export_setup_package(session: AuthSession = Depends(require_admin)) -> Dict[str, Any]:
-    """Export settings, rooms, and personnel as a reproducible setup package.
+    """Export settings only (ranks, departments, buildings, genders, passwords, policies).
 
     Returns:
-        Versioned dict containing settings, rooms, and personnel snapshots.
+        Versioned dict containing settings snapshot.
     """
     del session
     return {
         "version": 1,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "settings": load_settings(),
-        "rooms": _serialize_rooms_for_export(),
-        "personnel": _serialize_personnel_for_export(),
     }
 
 
@@ -370,48 +368,29 @@ def import_setup_package(
     body: Dict[str, Any],
     session: AuthSession = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """Import a full setup package atomically.
+    """Import a settings-only package.
 
     Args:
-        body: Setup-package dict containing ``settings``, ``rooms``, and
-            ``personnel`` keys.
+        body: Setup-package dict containing a ``settings`` key.
 
     Returns:
-        Dict with ok status, counts, integrity report, and sync status.
+        Dict with ok status and updated settings.
     """
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="גוף בקשת חבילת ההגדרה חייב להיות אובייקט JSON")
 
     settings_payload = body.get("settings")
-    rooms_payload = body.get("rooms")
-    personnel_payload = body.get("personnel")
 
     if not isinstance(settings_payload, dict):
         raise HTTPException(status_code=400, detail="חבילת ההגדרה חסרה אובייקט הגדרות תקין")
-    if not isinstance(rooms_payload, list):
-        raise HTTPException(status_code=400, detail="חבילת ההגדרה חסרה רשימת חדרים תקינה")
-    if not isinstance(personnel_payload, list):
-        raise HTTPException(status_code=400, detail="חבילת ההגדרה חסרה רשימת כוח אדם תקינה")
 
     settings_backup = load_settings()
-    rooms_backup = store.get_all("rooms")
-    personnel_backup = store.get_all("personnel")
 
     try:
         next_settings = _sanitize_settings(settings_payload, replace=True)
         save_settings(next_settings)
         reload_runtime_settings()
 
-        store.delete_all("saved_assignments")
-
-        personnel_df = pd.DataFrame(personnel_payload, columns=list(core.REQUIRED_PERSONNEL_COLS))
-        rooms_df = pd.DataFrame(
-            rooms_payload,
-            columns=[*core.REQUIRED_ROOM_COLS, core.occupant_ids_col, "designated_department"],
-        )
-
-        core.load_personnel(personnel_df)
-        core.load_rooms(rooms_df)
         integrity_report = core.reconcile_runtime_state()
         bump_version()
         append_audit_event(
@@ -421,24 +400,18 @@ def import_setup_package(
             action="setup_import",
             entity_type="settings",
             entity_id="setup-package",
-            message="חבילת הגדרה יובאה",
+            message="הגדרות יובאו",
             details={
-                "personnel_count": len(personnel_payload),
-                "room_count": len(rooms_payload),
                 "integrity_report": integrity_report,
             },
         )
         return {
             "ok": True,
             "settings": next_settings,
-            "personnel_count": len(personnel_payload),
-            "room_count": len(rooms_payload),
             "integrity_report": integrity_report,
             "sync_status": _enriched_sync_status(next_settings),
         }
     except Exception as exc:
         save_settings(settings_backup)
         reload_runtime_settings()
-        _restore_table("rooms", rooms_backup)
-        _restore_table("personnel", personnel_backup)
         raise HTTPException(status_code=400, detail=_he_error(exc))

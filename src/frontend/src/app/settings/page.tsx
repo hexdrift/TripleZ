@@ -12,6 +12,7 @@ import {
   IntegrityReport,
   importSetupPackage,
   resetAll,
+  resetData,
   SetupPackage,
   updateSettings,
 } from "@/lib/api";
@@ -29,6 +30,7 @@ import {
   IconLock,
   IconPlus,
   IconTrash,
+  IconRefresh,
   IconUpload,
   IconUsers,
 } from "@/components/icons";
@@ -62,8 +64,9 @@ function SettingsContent() {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [exportingSetup, setExportingSetup] = useState(false);
-  const [resetting, setResetting] = useState(false);
+  const [resetting, setResetting] = useState<false | "data" | "all">(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showResetDataConfirm, setShowResetDataConfirm] = useState(false);
   const [impactDetails, setImpactDetails] = useState<string[]>([]);
   const [showImpactConfirm, setShowImpactConfirm] = useState(false);
   const pendingImpactRef = useRef<{ personnel: Record<string, unknown>[]; rooms: Record<string, unknown>[] } | null>(null);
@@ -180,9 +183,7 @@ function SettingsContent() {
         updateLocalSettings(result.settings);
         await refreshPersonnel(true);
         showIntegrityReport(result.integrity_report);
-        toast.success(
-          `החבילה יובאה בהצלחה: ${result.personnel_count} אנשים ו-${result.room_count} חדרים`,
-        );
+        toast.success("ההגדרות יובאו בהצלחה");
       } else {
         const updated = await updateSettings(parsed as Partial<AppSettings>);
         updateLocalSettings(updated);
@@ -209,26 +210,27 @@ function SettingsContent() {
       const blob = new Blob([JSON.stringify(setupPackage, null, 2)], {
         type: "application/json",
       });
-      downloadBlob(blob, "triplez_setup_package.json");
+      downloadBlob(blob, "triplez_הגדרות.json");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "שגיאה בייצוא חבילה";
+      const message = e instanceof Error ? e.message : "שגיאה בייצוא הגדרות";
       setError(message);
-      toast.error("שגיאה בייצוא חבילה מלאה");
+      toast.error("שגיאה בייצוא הגדרות");
     } finally {
       setExportingSetup(false);
     }
   }
 
-  async function handleResetAll() {
-    setResetting(true);
-    setShowResetConfirm(false);
+  async function handleReset(type: "data" | "all") {
+    setResetting(type);
+    if (type === "data") setShowResetDataConfirm(false);
+    else setShowResetConfirm(false);
     try {
-      await resetAll();
+      if (type === "data") await resetData();
+      else await resetAll();
       await refreshPersonnel(true);
-      toast.success("כל הנתונים אופסו בהצלחה");
+      toast.success(type === "data" ? "חדרים וכוח אדם אופסו. ההגדרות נשמרו." : "כל הנתונים אופסו בהצלחה");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "שגיאה באיפוס";
-      toast.error(message);
+      toast.error(e instanceof Error ? e.message : "שגיאה באיפוס");
     } finally {
       setResetting(false);
     }
@@ -417,26 +419,51 @@ function SettingsContent() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="overflow-hidden border-amber-500/30 bg-gradient-to-br from-card via-card to-background/80">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-amber-600 flex items-center gap-2">
+                      <IconRefresh size={16} />
+                      איפוס חדרים וכוח אדם
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      מחיקת כל החדרים וכוח האדם. ההגדרות, סיסמאות ומפתח API נשמרים.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowResetDataConfirm(true)}
+                    disabled={!!resetting}
+                    className="border-amber-500/40 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                  >
+                    <IconRefresh size={14} />
+                    {resetting === "data" ? "מאפס..." : "איפוס נתונים"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
             <Card className="overflow-hidden border-destructive/30 bg-gradient-to-br from-card via-card to-background/80">
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-[15px] font-semibold text-destructive flex items-center gap-2">
                       <IconAlertCircle size={16} />
-                      איפוס נתונים
+                      איפוס מלא
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      מחיקת כל החדרים וכוח האדם מהמערכת. פעולה זו אינה הפיכה.
+                      מחיקת הכל כולל יומן פעולות. פעולה זו אינה הפיכה.
                     </p>
                   </div>
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={() => setShowResetConfirm(true)}
-                    disabled={resetting}
+                    disabled={!!resetting}
                   >
                     <IconTrash size={14} />
-                    {resetting ? "מאפס..." : "איפוס הכל"}
+                    {resetting === "all" ? "מאפס..." : "איפוס הכל"}
                   </Button>
                 </div>
               </CardContent>
@@ -507,16 +534,33 @@ function SettingsContent() {
       </motion.div>
 
       <ConfirmationDialog
+        open={showResetDataConfirm}
+        onOpenChange={setShowResetDataConfirm}
+        title="איפוס חדרים וכוח אדם"
+        description={[
+          "פעולה זו תמחק:",
+          "",
+          "• כל החדרים והמיטות",
+          "• כל כוח האדם",
+          "• כל השיבוצים והשמירות",
+          "",
+          "הגדרות, סיסמאות, מפתח API ויומן פעולות יישמרו.",
+        ].join("\n")}
+        confirmLabel="אפס נתונים"
+        confirmIcon={<IconRefresh size={14} />}
+        onConfirm={() => handleReset("data")}
+      />
+
+      <ConfirmationDialog
         open={showResetConfirm}
         onOpenChange={setShowResetConfirm}
-        title="איפוס כל הנתונים"
+        title="איפוס מלא"
         description={[
           "פעולה זו תמחק לצמיתות את כל הנתונים הבאים:",
           "",
           "• כל החדרים והמיטות",
           "• כל כוח האדם",
-          "• כל השיבוצים הפעילים",
-          "• מיטות שמורות (שמירת מקום)",
+          "• כל השיבוצים והשמירות",
           "• יומן הביקורת (לוגים)",
           "",
           "ההגדרות (סיסמאות, רשימות, מפתח API) לא יימחקו.",
@@ -524,7 +568,7 @@ function SettingsContent() {
         ].join("\n")}
         confirmLabel="אפס הכל"
         confirmIcon={<IconTrash size={14} />}
-        onConfirm={handleResetAll}
+        onConfirm={() => handleReset("all")}
       />
 
       <ConfirmationDialog
@@ -996,11 +1040,7 @@ function normalizeLocalSettings(settings: AppSettings): AppSettings {
 function isSetupPackage(value: unknown): value is SetupPackage {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<SetupPackage>;
-  return (
-    !!candidate.settings &&
-    Array.isArray(candidate.rooms) &&
-    Array.isArray(candidate.personnel)
-  );
+  return !!candidate.settings && typeof candidate.settings === "object";
 }
 
 async function copyToClipboard(text: string): Promise<void> {

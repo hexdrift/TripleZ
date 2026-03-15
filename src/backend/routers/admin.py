@@ -1304,6 +1304,26 @@ def delete_person(
     return SimpleOK(ok=True)
 
 
+@router.post("/reset-data", response_model=SimpleOK)
+def reset_data(session: AuthSession = Depends(require_admin)) -> SimpleOK:
+    """Wipe rooms, personnel, and saved assignments. Keeps settings, passwords, and audit log."""
+    store.delete_all("rooms")
+    store.delete_all("personnel")
+    store.delete_all("saved_assignments")
+    bump_version()
+    append_audit_event(
+        store,
+        actor_role=session.role,
+        actor_department=_actor_department(session),
+        action="reset_data",
+        entity_type="system",
+        entity_id="data",
+        message="חדרים וכוח אדם אופסו (הגדרות נשמרו)",
+    )
+    logger.info("Data (rooms, personnel, saved assignments) reset by %s", session.role)
+    return SimpleOK(ok=True)
+
+
 @router.post("/reset-all", response_model=SimpleOK)
 def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     """Wipe all rooms, personnel, saved assignments, and audit log."""
