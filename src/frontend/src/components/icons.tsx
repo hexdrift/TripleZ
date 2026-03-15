@@ -26,9 +26,9 @@ function svg(size: number, className: string, children: React.ReactNode) {
 
 export function IconZzz({ size = 22, className = "" }: IconProps) {
   return svg(size, className, <>
-    <path d="M4 12h4l-4 4h4" />
-    <path d="M10 4h4l-4 4h4" />
-    <path d="M16 8h4l-4 4h4" />
+    <path d="M4 12h5l-5 5h5" strokeWidth="2.5" />
+    <path d="M9 3h6l-6 6h6" strokeWidth="2.8" />
+    <path d="M16 8h5l-5 5h5" strokeWidth="2.5" />
   </>);
 }
 

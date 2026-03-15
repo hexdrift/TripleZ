@@ -79,6 +79,7 @@ PERSONNEL_HEADER_ALIASES = {
     "gender": "gender",
     "rank": "rank",
     "מספר אישי": "person_id",
+    "מזהה": "person_id",
     "שם מלא": "full_name",
     "זירה": "department",
     "מגדר": "gender",
@@ -1240,6 +1241,65 @@ def release_saved_assignment(
             "building_name": existing.get("building_name", ""),
             "room_number": existing.get("room_number", ""),
         },
+    )
+    return SimpleOK(ok=True)
+
+
+@router.delete("/room/{building_name}/{room_number}", response_model=SimpleOK)
+def delete_room(
+    building_name: str,
+    room_number: int,
+    session: AuthSession = Depends(require_admin),
+) -> SimpleOK:
+    """Delete a single room and remove all its occupants."""
+    room_id = f"{building_name}__{room_number}"
+    existing = store.get_by_id("rooms", room_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="החדר לא נמצא")
+    # Remove saved assignments for occupants in this room
+    occupant_ids = json.loads(existing.get("occupant_ids", "[]"))
+    for pid in occupant_ids:
+        store.delete("saved_assignments", pid)
+    store.delete("rooms", room_id)
+    bump_version()
+    append_audit_event(
+        store,
+        actor_role=session.role,
+        actor_department=_actor_department(session),
+        action="delete_room",
+        entity_type="room",
+        entity_id=room_id,
+        message=f"חדר {room_number} במבנה {building_name} נמחק",
+        details={"building_name": building_name, "room_number": room_number, "occupants_removed": len(occupant_ids)},
+    )
+    return SimpleOK(ok=True)
+
+
+@router.delete("/person/{person_id}", response_model=SimpleOK)
+def delete_person(
+    person_id: str,
+    session: AuthSession = Depends(require_admin),
+) -> SimpleOK:
+    """Delete a single person, unassign them from any room, and remove saved assignments."""
+    existing = store.get_by_id("personnel", person_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="האדם לא נמצא")
+    # Unassign from room if assigned
+    core.unassign(person_id=person_id)
+    # Remove saved assignment
+    store.delete("saved_assignments", person_id)
+    # Delete the person
+    store.delete("personnel", person_id)
+    bump_version()
+    append_audit_event(
+        store,
+        actor_role=session.role,
+        actor_department=_actor_department(session),
+        action="delete_person",
+        entity_type="person",
+        entity_id=person_id,
+        message=f"אדם {existing.get('full_name', person_id)} נמחק מהמערכת",
+        details={"person_id": person_id, "full_name": existing.get("full_name", "")},
     )
     return SimpleOK(ok=True)
 

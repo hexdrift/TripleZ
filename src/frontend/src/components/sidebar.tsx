@@ -146,8 +146,8 @@ export function Sidebar({ buildings, viewMode, rooms, collapsed, onToggleCollaps
       <div className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur lg:hidden">
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <IconZzz size={18} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <IconZzz size={22} />
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Triple Z</p>
@@ -275,9 +275,9 @@ function SidebarPane({
           <div className={cn("flex items-center", collapsed ? "justify-center w-full" : "gap-3")}>
             <div className={cn(
               "flex items-center justify-center rounded-xl border border-primary/15 bg-primary text-primary-foreground shadow-sm",
-              collapsed ? "h-10 w-10" : "h-10 w-10",
+              collapsed ? "h-10 w-10" : "h-12 w-12",
             )}>
-              <IconZzz size={collapsed ? 16 : 17} />
+              <IconZzz size={collapsed ? 18 : 24} />
             </div>
             {!collapsed && (
               <div className="min-w-0">

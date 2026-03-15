@@ -44,34 +44,41 @@ export function AutoAssignModal({
   onResult,
 }: AutoAssignModalProps) {
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
-  const [selectedGender, setSelectedGender] = useState<string | null>(null);
-  const [selectedRank, setSelectedRank] = useState<string | null>(null);
+  const [selectedDepartments, setSelectedDepartments] = useState<Set<string>>(new Set());
+  const [selectedGenders, setSelectedGenders] = useState<Set<string>>(new Set());
+  const [selectedRanks, setSelectedRanks] = useState<Set<string>>(new Set());
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
   const resetFilters = useCallback(() => {
     setFilterMode("all");
-    setSelectedDepartment(null);
-    setSelectedGender(null);
-    setSelectedRank(null);
+    setSelectedDepartments(new Set());
+    setSelectedGenders(new Set());
+    setSelectedRanks(new Set());
     setSelectedPersonIds(new Set());
     setSearchQuery("");
   }, []);
 
+  function toggleSet<T>(set: Set<T>, value: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    return next;
+  }
+
   // Personnel filtered by the active filter chips (for display in custom mode)
   const filteredPersonnel = useMemo(() => {
     let list = waitingPersonnel;
-    if (selectedDepartment) list = list.filter((p) => p.department === selectedDepartment);
-    if (selectedGender) list = list.filter((p) => p.gender === selectedGender);
-    if (selectedRank) list = list.filter((p) => p.rank === selectedRank);
+    if (selectedDepartments.size > 0) list = list.filter((p) => selectedDepartments.has(p.department));
+    if (selectedGenders.size > 0) list = list.filter((p) => selectedGenders.has(p.gender));
+    if (selectedRanks.size > 0) list = list.filter((p) => selectedRanks.has(p.rank));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLocaleLowerCase("he");
       list = list.filter((p) => p.full_name.toLocaleLowerCase("he").includes(q));
     }
     return list;
-  }, [waitingPersonnel, selectedDepartment, selectedGender, selectedRank, searchQuery]);
+  }, [waitingPersonnel, selectedDepartments, selectedGenders, selectedRanks, searchQuery]);
 
   // Count of people that will be assigned based on current filter
   const targetCount = useMemo(() => {
@@ -80,12 +87,7 @@ export function AutoAssignModal({
   }, [filterMode, filteredPersonnel.length, selectedPersonIds.size]);
 
   function togglePerson(id: string) {
-    setSelectedPersonIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelectedPersonIds((prev) => toggleSet(prev, id));
   }
 
   function selectAllVisible() {
@@ -110,10 +112,25 @@ export function AutoAssignModal({
       const filters: AutoAssignFilters = { expectedVersion: dataVersion };
       if (filterMode === "custom") {
         filters.person_ids = Array.from(selectedPersonIds);
-      } else {
-        if (selectedDepartment) filters.department = selectedDepartment;
-        if (selectedGender) filters.gender = selectedGender;
-        if (selectedRank) filters.rank = selectedRank;
+      } else if (filterMode === "department" && selectedDepartments.size > 0) {
+        // Multi-department: send as person_ids if more than one selected
+        if (selectedDepartments.size === 1) {
+          filters.department = Array.from(selectedDepartments)[0];
+        } else {
+          filters.person_ids = filteredPersonnel.map((p) => p.person_id);
+        }
+      } else if (filterMode === "gender" && selectedGenders.size > 0) {
+        if (selectedGenders.size === 1) {
+          filters.gender = Array.from(selectedGenders)[0];
+        } else {
+          filters.person_ids = filteredPersonnel.map((p) => p.person_id);
+        }
+      } else if (filterMode === "rank" && selectedRanks.size > 0) {
+        if (selectedRanks.size === 1) {
+          filters.rank = Array.from(selectedRanks)[0];
+        } else {
+          filters.person_ids = filteredPersonnel.map((p) => p.person_id);
+        }
       }
       const result = await autoAssignUnassigned(filters);
       onResult({
@@ -137,9 +154,9 @@ export function AutoAssignModal({
   function handleTabChange(value: string) {
     const mode = value as FilterMode;
     setFilterMode(mode);
-    if (mode !== "department") setSelectedDepartment(null);
-    if (mode !== "gender") setSelectedGender(null);
-    if (mode !== "rank") setSelectedRank(null);
+    if (mode !== "department") setSelectedDepartments(new Set());
+    if (mode !== "gender") setSelectedGenders(new Set());
+    if (mode !== "rank") setSelectedRanks(new Set());
   }
 
   const allVisibleSelected = filteredPersonnel.length > 0 && filteredPersonnel.every((p) => selectedPersonIds.has(p.person_id));
@@ -192,11 +209,12 @@ export function AutoAssignModal({
               <div className="grid grid-cols-2 gap-2">
                 {departments.map((dept) => {
                   const count = waitingPersonnel.filter((p) => p.department === dept).length;
+                  const selected = selectedDepartments.has(dept);
                   return (
                     <OptionCard
                       key={dept}
-                      selected={selectedDepartment === dept}
-                      onClick={() => setSelectedDepartment(selectedDepartment === dept ? null : dept)}
+                      selected={selected}
+                      onClick={() => setSelectedDepartments(toggleSet(selectedDepartments, dept))}
                     >
                       <span className="font-medium">{deptHe(dept)}</span>
                       <Badge variant="secondary" className="text-[11px]">{count}</Badge>
@@ -204,6 +222,11 @@ export function AutoAssignModal({
                   );
                 })}
               </div>
+              {selectedDepartments.size > 0 ? (
+                <p className="mt-3 text-[12px] text-muted-foreground">
+                  {filteredPersonnel.length} אנשים מ-{selectedDepartments.size} זירות
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -212,11 +235,12 @@ export function AutoAssignModal({
               <div className="grid grid-cols-2 gap-2">
                 {genders.map((g) => {
                   const count = waitingPersonnel.filter((p) => p.gender === g).length;
+                  const selected = selectedGenders.has(g);
                   return (
                     <OptionCard
                       key={g}
-                      selected={selectedGender === g}
-                      onClick={() => setSelectedGender(selectedGender === g ? null : g)}
+                      selected={selected}
+                      onClick={() => setSelectedGenders(toggleSet(selectedGenders, g))}
                     >
                       <span className="font-medium">{genderHe(g)}</span>
                       <Badge variant="secondary" className="text-[11px]">{count}</Badge>
@@ -224,6 +248,11 @@ export function AutoAssignModal({
                   );
                 })}
               </div>
+              {selectedGenders.size > 0 ? (
+                <p className="mt-3 text-[12px] text-muted-foreground">
+                  {filteredPersonnel.length} אנשים
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -232,11 +261,12 @@ export function AutoAssignModal({
               <div className="grid grid-cols-2 gap-2">
                 {ranks.map((r) => {
                   const count = waitingPersonnel.filter((p) => p.rank === r).length;
+                  const selected = selectedRanks.has(r);
                   return (
                     <OptionCard
                       key={r}
-                      selected={selectedRank === r}
-                      onClick={() => setSelectedRank(selectedRank === r ? null : r)}
+                      selected={selected}
+                      onClick={() => setSelectedRanks(toggleSet(selectedRanks, r))}
                     >
                       <span className="font-medium">{rankHe(r)}</span>
                       <Badge variant="secondary" className="text-[11px]">{count}</Badge>
@@ -244,6 +274,11 @@ export function AutoAssignModal({
                   );
                 })}
               </div>
+              {selectedRanks.size > 0 ? (
+                <p className="mt-3 text-[12px] text-muted-foreground">
+                  {filteredPersonnel.length} אנשים
+                </p>
+              ) : null}
             </div>
           ) : null}
 

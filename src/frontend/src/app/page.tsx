@@ -332,21 +332,20 @@ function DashboardContent() {
                 variant="outline"
                 size="sm"
                 onClick={() => exportToExcel(
-                  "נתונים_מלאים",
-                  ["שם מבנה", "מספר חדר", "דרגת חדר", "זירות", "מגדר", "מספר מיטות", "תפוסות", "שמורות", "פנויות", "מצב", "דיירים"],
-                  scopedRooms.map((r) => [
-                    buildingHe(r.building_name),
-                    String(r.room_number),
-                    rankHe(r.room_rank),
-                    r.departments.map(deptHe).join(", ") || "—",
-                    genderHe(r.gender),
-                    String(r.number_of_beds),
-                    String(r.occupant_count),
-                    String(r.reserved_beds || 0),
-                    String(r.available_beds),
-                    r.available_beds === 0 ? "מלא" : "פנוי",
-                    r.occupant_ids.map((id) => r.occupant_names?.[id] || id).join(" | "),
-                  ]),
+                  isManager ? `שיבוצים_${departmentLabel}` : "שיבוצים_כלל_הזירות",
+                  ["שם מבנה", "מספר חדר", "זירות", "מגדר"],
+                  scopedRooms.map((r) => {
+                    const deptLabel = isManager && r.departments.length === 1 && r.departments[0] === managerDept
+                      ? "—"
+                      : r.departments.map(deptHe).join(", ") || "—";
+                    return [
+                      buildingHe(r.building_name),
+                      String(r.room_number),
+                      deptLabel,
+                      genderHe(r.gender),
+                      r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
+                    ];
+                  }),
                 )}
                 className="inline-flex items-center gap-1.5 text-xs"
               >

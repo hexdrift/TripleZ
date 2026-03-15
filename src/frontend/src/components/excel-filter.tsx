@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconArrowDown, IconArrowUp, IconArrowUpDown, IconFilter, IconSearch } from "./icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,13 +41,9 @@ export function ColumnHeader<K extends string>({
   const filterActive = hasFilter && filters[filterCol] && filters[filterCol].size > 0;
   const isOpen = hasFilter && openFilter === filterCol;
   const filterIconRef = useRef<HTMLButtonElement>(null);
-  const thRef = useRef<HTMLTableCellElement>(null);
-
-  // Compute alignment once when opening, not reactively
-  const alignLeft = isOpen && thRef.current ? thRef.current.getBoundingClientRect().left < 220 : false;
 
   return (
-    <th ref={thRef} className={`relative select-none px-4 py-3 text-right font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}>
+    <th className={`relative select-none px-4 py-3 text-right font-semibold ${sortActive ? "text-foreground" : "text-muted-foreground"}`}>
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -83,7 +80,7 @@ export function ColumnHeader<K extends string>({
           onApply={(values) => { onFilter(filterCol, values); setOpenFilter(null); }}
           onClose={() => setOpenFilter(null)}
           ignoreRef={filterIconRef}
-          alignLeft={alignLeft}
+          anchorRef={filterIconRef}
         />
       ) : null}
     </th>
@@ -98,22 +95,30 @@ function FilterDropdown({
   onApply,
   onClose,
   ignoreRef,
-  alignLeft = false,
+  anchorRef,
 }: {
   options: { value: string; label: string }[];
   selected: Set<string>;
   onApply: (values: Set<string>) => void;
   onClose: () => void;
   ignoreRef?: React.RefObject<HTMLElement | null>;
-  alignLeft?: boolean;
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }) {
   // selected.size === 0 means "no filter" (all shown). We convert to explicit set for local editing.
   const [localSelected, setLocalSelected] = useState<Set<string>>(
     () => selected.size === 0 ? new Set(options.map((o) => o.value)) : new Set(selected),
   );
   const [search, setSearch] = useState("");
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  useLayoutEffect(() => {
+    if (anchorRef?.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+    }
+  }, [anchorRef]);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -154,10 +159,11 @@ function FilterDropdown({
     }
   }
 
-  return (
+  const dropdown = (
     <div
       ref={ref}
-      className={`absolute top-full z-30 mt-2 min-w-[220px] rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl ${alignLeft ? "left-0" : "right-0"}`}
+      className="fixed z-50 min-w-[220px] rounded-[22px] border border-border/70 bg-popover/95 p-2 shadow-[var(--shadow-card)] backdrop-blur-xl"
+      style={pos ? { top: pos.top, right: pos.right } : { visibility: "hidden" as const }}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Search box */}
@@ -233,6 +239,8 @@ function FilterDropdown({
       </div>
     </div>
   );
+
+  return createPortal(dropdown, document.body);
 }
 
 /* ── Hook for filter state management ── */

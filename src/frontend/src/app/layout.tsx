@@ -28,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="he" dir="rtl" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="/" crossOrigin="" />
         {process.env.NEXT_PUBLIC_API_URL && (
           <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_URL} />
         )}

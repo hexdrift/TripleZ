@@ -10,11 +10,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
-import { exportToExcel } from "@/lib/export";
 import { getSettings } from "@/lib/api";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import { Room } from "@/lib/types";
-import { IconDoor, IconDownload, IconPlus, IconSearch, IconZzz } from "@/components/icons";
+import { IconDoor, IconPlus, IconSearch, IconZzz } from "@/components/icons";
 
 const AddRoomModal = dynamic(
   () => import("@/components/add-room-modal").then((module) => module.AddRoomModal),
@@ -275,33 +274,7 @@ function RoomsContent() {
               />
             </div>
 
-            <div className="flex lg:justify-self-end">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  exportToExcel(
-                    "חדרים",
-                    ["שם מבנה", "מספר חדר", "דרגת חדר", "זירות", "מגדר", "מספר מיטות", "תפוסה", "מצב"],
-                    sortedRooms.map((room) => [
-                      `${buildingHe(room.building_name)}`,
-                      String(room.room_number),
-                      rankHe(room.room_rank),
-                      roomDepartmentsLabel(room),
-                      genderHe(room.gender),
-                      String(room.number_of_beds),
-                      `${room.occupant_count}/${room.number_of_beds}`,
-                      roomStatusHe(room),
-                    ]),
-                  )
-                }
-                className="inline-flex h-9 shrink-0 items-center gap-1.5 text-[12px]"
-              >
-                <IconDownload size={14} />
-                ייצוא לאקסל
-              </Button>
-            </div>
+            <div className="flex lg:justify-self-end" />
           </div>
         </div>
       </Card>
@@ -513,7 +486,7 @@ function RoomRow({ room, onClick }: { room: Room; onClick: () => void }) {
       <TableCell className="px-4 py-3 font-semibold text-foreground">{buildingHe(room.building_name)}</TableCell>
       <TableCell className="px-4 py-3 font-semibold text-foreground">{room.room_number}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{rankHe(room.room_rank)}</TableCell>
-      <TableCell className="px-4 py-3 text-muted-foreground">{roomDepartmentsLabel(room)}</TableCell>
+      <TableCell className="px-4 py-3 text-muted-foreground whitespace-normal max-w-[180px]">{roomDepartmentsLabel(room)}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{genderHe(room.gender)}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{room.number_of_beds}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{room.occupant_count}/{room.number_of_beds}</TableCell>

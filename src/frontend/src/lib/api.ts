@@ -372,6 +372,14 @@ export async function resetAll(): Promise<{ ok: boolean }> {
   return fetchJSON("/admin/reset-all", { method: "POST" });
 }
 
+export async function deleteRoom(buildingName: string, roomNumber: number): Promise<{ ok: boolean }> {
+  return fetchJSON(`/admin/room/${encodeURIComponent(buildingName)}/${roomNumber}`, { method: "DELETE" });
+}
+
+export async function deletePerson(personId: string): Promise<{ ok: boolean }> {
+  return fetchJSON(`/admin/person/${encodeURIComponent(personId)}`, { method: "DELETE" });
+}
+
 export async function releaseSavedAssignment(personId: string): Promise<{ ok: boolean; detail?: string }> {
   return fetchJSON(`/admin/saved-assignment/${encodeURIComponent(personId)}`, { method: "DELETE" });
 }

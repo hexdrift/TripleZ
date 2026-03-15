@@ -12,6 +12,7 @@ import {
   updateRoomMetadata,
   getAuthContext,
   releaseSavedAssignment,
+  deleteRoom,
 } from "@/lib/api";
 import { useAppData } from "./app-shell";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
@@ -96,6 +97,7 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
   const { rooms, personnel, auth, dataVersion } = useAppData();
   const [selectedBed, setSelectedBed] = useState<number | null>(null);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [view, setView] = useState<ModalView>(
     auth.role === "admin" ? "chooser" : "assignments",
@@ -173,7 +175,7 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
         : (liveRoom.reserved_persons || []);
 
       for (const pid of idsToUnassign) {
-        await unassignPerson(pid, dataVersion);
+        await unassignPerson(pid);
       }
       for (const rp of reservedToRelease) {
         await releaseSavedAssignment(rp.person_id);
@@ -184,6 +186,17 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
       toast.error("שגיאה באיפוס החדר");
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function handleDeleteRoom() {
+    if (!liveRoom) return;
+    try {
+      await deleteRoom(liveRoom.building_name, liveRoom.room_number);
+      toast.success(`חדר ${liveRoom.room_number} נמחק`);
+      onClose();
+    } catch {
+      toast.error("שגיאה במחיקת החדר");
     }
   }
 
@@ -223,7 +236,11 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
     ? isRoomAssignableByManager(liveRoom, managerDept, personnelMap)
     : true;
   const hasOccupantsOrReserved = liveRoom.occupant_ids.length > 0 || (liveRoom.reserved_persons?.length ?? 0) > 0;
-  const canReset = hasOccupantsOrReserved && (isAdmin || (isManager && roomIsAssignable));
+  const allOccupantsAreDept = isManager && liveRoom.occupant_ids.length > 0 && liveRoom.occupant_ids.every((id) => {
+    const p = personnelMap.get(id);
+    return p?.department === managerDept;
+  });
+  const canReset = hasOccupantsOrReserved && (isAdmin || (isManager && (roomIsAssignable || allOccupantsAreDept)));
   const showBack = view === "detail" || (isAdmin && view !== "chooser");
 
   const modalTitle =
@@ -288,6 +305,17 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
               </DialogHeader>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  aria-label="מחיקת חדר"
+                  className="rounded-lg text-muted-foreground hover:text-destructive"
+                >
+                  <IconTrash size={16} />
+                </Button>
+              )}
               {canReset && (
                 <Button
                   variant="ghost"
@@ -512,6 +540,18 @@ export function RoomDetailModal({ room, onClose }: RoomDetailModalProps) {
         onConfirm={() => {
           setConfirmResetOpen(false);
           handleResetRoom();
+        }}
+      />
+      <ConfirmationDialog
+        open={confirmDeleteOpen}
+        title="למחוק את החדר?"
+        description={`חדר ${liveRoom.room_number} במבנה ${buildingHe(liveRoom.building_name)} יימחק לצמיתות כולל כל השיבוצים בו.`}
+        confirmLabel="מחק"
+        confirmIcon={<IconTrash size={14} />}
+        onOpenChange={setConfirmDeleteOpen}
+        onConfirm={() => {
+          setConfirmDeleteOpen(false);
+          handleDeleteRoom();
         }}
       />
     </Dialog>

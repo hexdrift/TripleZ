@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+checkin.db
+ui/node_modules/
+ui/.next/
+ui/out/
+.DS_Store

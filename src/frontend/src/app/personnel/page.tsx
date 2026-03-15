@@ -6,13 +6,17 @@ import { Breadcrumb } from "@/components/breadcrumb";
 import { ColumnHeader, useColumnFilters } from "@/components/excel-filter";
 import { exportToExcel } from "@/lib/export";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
-import { IconDownload, IconPlus, IconSearch, IconUsers } from "@/components/icons";
+import { IconDownload, IconPlus, IconSearch, IconTrash, IconUsers } from "@/components/icons";
 import dynamic from "next/dynamic";
 const AddPersonnelModal = dynamic(() => import("@/components/add-personnel-modal").then(m => m.AddPersonnelModal), { ssr: false });
+import { deletePerson } from "@/lib/api";
+import { toast } from "react-toastify";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import dynamic2 from "next/dynamic";
+const ConfirmationDialog = dynamic2(() => import("@/components/confirmation-dialog").then(m => m.ConfirmationDialog), { ssr: false });
 
 type SortKey = "person_id" | "full_name" | "building_name" | "room_number" | "room_rank" | "department" | "gender" | "assignment_status";
 type SortDir = "asc" | "desc";
@@ -39,6 +43,7 @@ function PersonnelContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [personnelModalOpen, setPersonnelModalOpen] = useState(false);
   const { filters, setColumnFilter, openFilter, setOpenFilter, clearAll, activeCount } = useColumnFilters();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const isManager = auth.role === "manager";
   const departmentLabel = deptHe(auth.department || "");
 
@@ -310,6 +315,18 @@ function PersonnelContent() {
                           <TableCell className="px-4 py-2.5 text-[13px] text-muted-foreground">{deptHe(person.department)}</TableCell>
                         ) : null}
                         <TableCell className="px-4 py-2.5 text-[13px] text-muted-foreground">{genderHe(person.gender)}</TableCell>
+                        {!isManager ? (
+                          <TableCell className="px-2 py-2.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget({ id: person.person_id, name: person.full_name || person.person_id })}
+                              className="rounded-md p-1 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              aria-label="מחק"
+                            >
+                              <IconTrash size={13} />
+                            </button>
+                          </TableCell>
+                        ) : null}
                       </TableRow>
                     );
                   })
@@ -328,6 +345,25 @@ function PersonnelContent() {
             await refreshPersonnel(true);
           }}
           initialView="chooser"
+        />
+      ) : null}
+      {deleteTarget ? (
+        <ConfirmationDialog
+          open={!!deleteTarget}
+          title="למחוק את האדם?"
+          description={`${deleteTarget.name} (${deleteTarget.id}) יימחק לצמיתות מהמערכת כולל שיבוצים.`}
+          confirmLabel="מחק"
+          confirmIcon={<IconTrash size={14} />}
+          onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+          onConfirm={async () => {
+            try {
+              await deletePerson(deleteTarget.id);
+              toast.success(`${deleteTarget.name} נמחק`);
+              setDeleteTarget(null);
+            } catch {
+              toast.error("שגיאה במחיקה");
+            }
+          }}
         />
       ) : null}
     </div>

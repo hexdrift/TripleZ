@@ -290,10 +290,10 @@ function BuildingContent() {
         : filter.label;
   const exportName =
     filter.type === "building"
-      ? `${buildingHe(filter.value)}_חדרים`
+      ? isManager ? `שיבוצים_${departmentLabel}_מבנה_${buildingHe(filter.value)}` : `שיבוצים_מבנה_${buildingHe(filter.value)}`
       : filter.type === "all" && isManager
-        ? `חדרי_${departmentLabel}`
-        : `${filter.label}_חדרים`;
+        ? `שיבוצים_${departmentLabel}`
+        : `שיבוצים_${filter.label}`;
 
   // Show building column when not filtering by building
   const showBuildingCol = filter.type !== "building" && (buildings.length > 1 || !isManager);
@@ -329,17 +329,13 @@ function BuildingContent() {
                 size="sm"
                 onClick={() => exportToExcel(
                   exportName,
-                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", "דרגת חדר", showDepartmentCol ? "זירות" : null, "מגדר", "מספר מיטות", "תפוסות", "פנויות", "מצב"].filter(Boolean) as string[],
+                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", showDepartmentCol ? "זירות" : null, "מגדר"].filter(Boolean) as string[],
                   filteredRooms.map((r) => [
                     ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
                     String(r.room_number),
-                    rankHe(r.room_rank),
                     ...(showDepartmentCol ? [r.departments.map(deptHe).join(", ") || "—"] : []),
                     genderHe(r.gender),
-                    String(r.number_of_beds),
-                    String(r.occupant_count),
-                    String(r.available_beds),
-                    roomStatusHe(r),
+                    r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
                   ]),
                 )}
                 className="inline-flex h-9 shrink-0 items-center gap-1.5 text-[12px]"
@@ -512,7 +508,7 @@ function RoomRow({ room, showBuilding, onClick }: { room: Room; showBuilding: bo
       <TableCell className="px-4 py-3 font-semibold text-foreground">{room.room_number}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{rankHe(room.room_rank)}</TableCell>
       {showDepartmentCol ? (
-        <TableCell className="px-4 py-3 text-muted-foreground">{room.departments.length > 0 ? room.departments.map(deptHe).join(", ") : "—"}</TableCell>
+        <TableCell className="px-4 py-3 text-muted-foreground whitespace-normal max-w-[180px]">{room.departments.length > 0 ? room.departments.map(deptHe).join(", ") : "—"}</TableCell>
       ) : null}
       <TableCell className="px-4 py-3 text-muted-foreground">{genderHe(room.gender)}</TableCell>
       <TableCell className="px-4 py-3 text-muted-foreground">{room.number_of_beds}</TableCell>
