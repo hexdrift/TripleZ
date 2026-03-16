@@ -2,115 +2,93 @@
 
 import * as React from "react"
 
-import { cn } from "@/lib/utils"
-
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({ style, ...props }: React.ComponentProps<"table">) {
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
-    >
+    <div data-slot="table-container" style={{ position: 'relative', width: '100%', overflowX: 'auto' }}>
       <table
         data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
+        style={{ width: '100%', captionSide: 'bottom', fontSize: '14px', ...style }}
         {...props}
       />
     </div>
   )
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
-  return (
-    <thead
-      data-slot="table-header"
-      className={cn("bg-transparent [&_tr]:border-b [&_tr]:border-border/70", className)}
-      {...props}
-    />
-  )
+function TableHeader({ style, ...props }: React.ComponentProps<"thead">) {
+  return <thead data-slot="table-header" style={{ backgroundColor: 'transparent', ...style }} {...props} />
 }
 
-function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
-  return (
-    <tbody
-      data-slot="table-body"
-      className={cn("[&_tr:last-child]:border-0", className)}
-      {...props}
-    />
-  )
+function TableBody({ style, ...props }: React.ComponentProps<"tbody">) {
+  return <tbody data-slot="table-body" style={style} {...props} />
 }
 
-function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+function TableFooter({ style, ...props }: React.ComponentProps<"tfoot">) {
   return (
     <tfoot
       data-slot="table-footer"
-      className={cn(
-        "border-t border-border/70 bg-muted/50 font-medium [&>tr]:last:border-b-0",
-        className
-      )}
+      style={{
+        borderTop: '1px solid color-mix(in srgb, var(--border) 70%, transparent)',
+        backgroundColor: 'color-mix(in srgb, var(--muted) 50%, transparent)',
+        fontWeight: 500,
+        ...style,
+      }}
       {...props}
     />
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+function TableRow({ style, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
-      className={cn(
-        "border-b border-border/60 transition-colors hover:bg-accent/45 data-[state=selected]:bg-muted/75",
-        className
-      )}
+      style={{
+        borderBottom: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+        transition: 'background-color 100ms',
+        ...style,
+      }}
       {...props}
     />
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({ style, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       data-slot="table-head"
-      className={cn(
-        "h-12 px-2 text-start align-middle text-[12px] font-semibold whitespace-nowrap text-muted-foreground [&:has([role=checkbox])]:pe-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
-      )}
+      style={{
+        height: '48px',
+        padding: '0 8px',
+        textAlign: 'start',
+        verticalAlign: 'middle',
+        fontSize: '12px',
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+        color: 'var(--muted-foreground)',
+        ...style,
+      }}
       {...props}
     />
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({ style, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn(
-        "p-2.5 align-middle whitespace-nowrap [&:has([role=checkbox])]:pe-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
-      )}
+      style={{ padding: '10px', verticalAlign: 'middle', whiteSpace: 'nowrap', ...style }}
       {...props}
     />
   )
 }
 
-function TableCaption({
-  className,
-  ...props
-}: React.ComponentProps<"caption">) {
+function TableCaption({ style, ...props }: React.ComponentProps<"caption">) {
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      style={{ marginTop: '16px', fontSize: '14px', color: 'var(--muted-foreground)', ...style }}
       {...props}
     />
   )
 }
 
-export {
-  Table,
-  TableHeader,
-  TableBody,
-  TableFooter,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableCaption,
-}
+export { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell, TableCaption }

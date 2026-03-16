@@ -1,48 +1,68 @@
 import * as React from "react"
-import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
 
-import { cn } from "@/lib/utils"
+const badgeBase: React.CSSProperties = {
+  display: 'inline-flex',
+  width: 'fit-content',
+  flexShrink: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '4px',
+  overflow: 'hidden',
+  borderRadius: '9999px',
+  padding: '4px 10px',
+  fontSize: '12px',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
+  transition: 'color 150ms, box-shadow 150ms, background-color 150ms, border-color 150ms',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.55)',
+}
 
-const badgeVariants = cva(
-  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-[color,box-shadow,background-color,border-color] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
-  {
-    variants: {
-      variant: {
-        default: "border-primary/20 bg-primary text-primary-foreground [a&]:hover:bg-primary/92",
-        secondary:
-          "border-border/60 bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "border-destructive/20 bg-destructive text-white focus-visible:ring-destructive/20 dark:bg-destructive/70 dark:focus-visible:ring-destructive/40 [a&]:hover:bg-destructive/90",
-        outline:
-          "border-border/70 bg-background/70 text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        ghost: "border-transparent bg-transparent [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 [a&]:hover:underline",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-)
+const variants: Record<string, React.CSSProperties> = {
+  default: {
+    border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)',
+    backgroundColor: 'var(--primary)',
+    color: 'var(--primary-foreground)',
+  },
+  secondary: {
+    border: '1px solid color-mix(in srgb, var(--border) 60%, transparent)',
+    backgroundColor: 'var(--secondary)',
+    color: 'var(--secondary-foreground)',
+  },
+  destructive: {
+    border: '1px solid color-mix(in srgb, var(--destructive) 20%, transparent)',
+    backgroundColor: 'var(--destructive)',
+    color: 'white',
+  },
+  outline: {
+    border: '1px solid color-mix(in srgb, var(--border) 70%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--background) 70%, transparent)',
+    color: 'var(--foreground)',
+  },
+  ghost: {
+    border: '1px solid transparent',
+    backgroundColor: 'transparent',
+  },
+}
 
 function Badge({
-  className,
+  style,
   variant = "default",
   asChild = false,
   ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+}: React.ComponentProps<"span"> & {
+  variant?: string
+  asChild?: boolean
+}) {
   const Comp = asChild ? Slot.Root : "span"
-
   return (
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant }), className)}
+      style={{ ...badgeBase, ...(variants[variant || 'default'] || variants.default), ...style }}
       {...props}
     />
   )
 }
 
-export { Badge, badgeVariants }
+export { Badge }

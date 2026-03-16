@@ -7,8 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "react-toastify";
 
 const API = "/api";
 
@@ -32,8 +30,14 @@ async function apiFetch<T>(url: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/* ── Style constants ── */
+const S = {
+  truncate: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as React.CSSProperties,
+  mono: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } as React.CSSProperties,
+};
+
 /* ── Time input with validation ── */
-function TimeInput({ value, onChange, className = "" }: { value: string; onChange: (v: string) => void; className?: string }) {
+function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
     let v = e.target.value.replace(/[^\d:]/g, "");
     const digits = v.replace(/:/g, "");
@@ -49,13 +53,18 @@ function TimeInput({ value, onChange, className = "" }: { value: string; onChang
     onChange(v);
   }
   const complete = /^\d{2}:\d{2}$/.test(value);
-  const borderCls = value === "" ? "border-input" : complete ? "border-emerald-300 bg-emerald-50" : "border-amber-400 bg-amber-50";
+  const borderStyle: React.CSSProperties = value === ""
+    ? { borderColor: 'var(--input)' }
+    : complete
+      ? { borderColor: '#6ee7b7', backgroundColor: '#ecfdf5' }
+      : { borderColor: '#fbbf24', backgroundColor: '#fffbeb' };
+
   return (
     <input
       value={value}
       onChange={handleInput}
       placeholder="—"
-      className={`w-16 text-center rounded-md border px-1 py-1 text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-ring/30 ${borderCls} ${className}`}
+      style={{ width: '64px', textAlign: 'center', borderRadius: '6px', border: '1px solid', padding: '4px', fontSize: '12px', lineHeight: '16px', transition: 'color 150ms, background-color 150ms, border-color 150ms', outline: 'none', ...borderStyle }}
     />
   );
 }
@@ -75,6 +84,7 @@ export default function CheckinPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editIds, setEditIds] = useState<string[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -86,7 +96,7 @@ export default function CheckinPage() {
       setCfg(cfgRes);
       setRecords(dataRes.records);
       setDates(dataRes.dates);
-    } catch { toast.error("שגיאה בטעינת נתונים"); }
+    } catch { }
     setLoading(false);
   }, []);
 
@@ -103,7 +113,7 @@ export default function CheckinPage() {
     }
     if (arena !== "הכל") list = list.filter((r) => r.personnel.arena === arena);
     if (statusFilter !== "הכל") list = list.filter((r) => r.personnel.service_type === statusFilter);
-    if (activeOnly) list = list.filter((r) => r.current.some((c) => c.on_shift));
+    if (activeOnly) list = list.filter((r) => r.current[0]?.on_shift);
     if (dateFrom || dateTo) {
       list = list.filter((r) => r.future.some((f) => {
         if (dateFrom && f.date < dateFrom) return false;
@@ -138,8 +148,8 @@ export default function CheckinPage() {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "קמבצ");
-    XLSX.writeFile(wb, "קמבצ_צק_אין.xlsx");
-    toast.success("הקובץ הורד בהצלחה");
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `דוח_קמבצ_משמרות_${today}.xlsx`);
   }
 
   function downloadTemplate() {
@@ -151,8 +161,8 @@ export default function CheckinPage() {
     ws["!cols"] = headers.map(() => ({ wch: 14 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "תבנית");
-    XLSX.writeFile(wb, "תבנית_משמרת_עתידית.xlsx");
-    toast.success("תבנית הורדה בהצלחה");
+    const today = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `תבנית_העלאת_משמרות_${today}.xlsx`);
   }
 
   async function handleUpload(file: File) {
@@ -162,94 +172,115 @@ export default function CheckinPage() {
       const res = await fetch(API + "/upload-future", { method: "POST", body: form });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      toast.success(`${result.count} רשומות משמרת עתידית עודכנו`);
       setUploadOpen(false);
       await loadData();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "שגיאה בטעינת הקובץ"); }
+    } catch {}
   }
 
-  if (loading) return <div className="flex items-center justify-center min-h-screen text-muted-foreground">טוען...</div>;
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: 'var(--muted-foreground)' }}>טוען...</div>
+  );
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <Card className="overflow-hidden">
+    <div style={{ padding: '16px' }}>
+      <Card style={{ overflow: 'hidden', gap: 0 }}>
         {/* Toolbar Row 1 */}
-        <div className="flex items-center gap-3 border-b px-4 py-3">
-          <h1 className="text-lg font-bold text-foreground shrink-0">תצוגת קמב&quot;צ</h1>
-          <div className="relative flex-1 max-w-xs">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid var(--border)', padding: '12px 16px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--foreground)', flexShrink: 0 }}>תצוגת קמב&quot;צ</h1>
+          <div style={{ position: 'relative', flex: '1 1 0%', maxWidth: '20rem' }}>
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="חיפוש לפי שם או מ.א."
-              className="h-8 text-xs pr-3"
+              style={{ height: '32px', fontSize: '12px', paddingRight: '12px' }}
             />
           </div>
-          <div className="mr-auto" />
+          <div style={{ marginRight: 'auto' }} />
           {selected.size > 0 && (
             <>
-              <Badge variant="secondary" className="text-[11px]">{selected.size} נבחרו</Badge>
-              <Button variant="ghost" size="sm" className="text-[11px]" onClick={() => { setEditIds([...selected]); setEditOpen(true); }}>עריכה</Button>
+              <Badge variant="secondary" style={{ fontSize: '11px' }}>{selected.size} נבחרו</Badge>
+              <Button variant="ghost" size="sm" style={{ fontSize: '11px' }} onClick={() => { setEditIds([...selected]); setEditOpen(true); }}>עריכה</Button>
             </>
           )}
-          <span className="text-[11px] text-muted-foreground">{filtered.length} רשומות</span>
-          <div className="h-4 w-px bg-border" />
+          <span style={{ fontSize: '11px', color: 'var(--muted-foreground)' }}>{filtered.length} רשומות</span>
+          <div style={{ height: '16px', width: '1px', backgroundColor: 'var(--border)' }} />
           <Button variant="ghost" size="icon-sm" onClick={() => setUploadOpen(true)} title="העלאת משמרת עתידית">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            <svg style={{ height: '16px', width: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={handleDownload} title="הורדה לאקסל">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            <svg style={{ height: '16px', width: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
           </Button>
         </div>
 
         {/* Toolbar Row 2: Filter chips */}
-        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 bg-muted/30">
-          <button onClick={() => setActiveOnly(!activeOnly)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-all ${activeOnly ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-border bg-background text-muted-foreground hover:text-foreground"}`}>
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${activeOnly ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border)', padding: '8px 16px', backgroundColor: 'color-mix(in srgb, var(--muted) 30%, transparent)' }}>
+          <button
+            onClick={() => setActiveOnly(!activeOnly)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '9999px', padding: '4px 12px', fontSize: '11px', fontWeight: 500, transition: 'all 150ms', cursor: 'pointer',
+              border: activeOnly ? '1px solid #6ee7b7' : '1px solid var(--border)',
+              backgroundColor: activeOnly ? '#ecfdf5' : 'var(--background)',
+              color: activeOnly ? '#047857' : 'var(--muted-foreground)',
+            }}
+          >
+            <span style={{ display: 'inline-block', height: '6px', width: '6px', borderRadius: '9999px', backgroundColor: activeOnly ? '#10b981' : 'color-mix(in srgb, var(--muted-foreground) 40%, transparent)' }} />
             משמרת פעילות
           </button>
           <FilterChip label="זירה" value={arena} options={arenaOptions} onChange={setArena} activeColor="blue" />
           <FilterChip label="שירות" value={statusFilter} options={serviceOptions} onChange={setStatusFilter} activeColor="purple" />
-          {hasFilters && <button onClick={clearFilters} className="rounded-full px-2.5 py-1 text-[11px] font-medium text-destructive hover:bg-destructive/10">נקה הכל</button>}
+          <button
+            onClick={() => setFilterOpen(true)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', borderRadius: '9999px', padding: '4px 12px', fontSize: '11px', fontWeight: 500, cursor: 'pointer', transition: 'all 150ms',
+              ...(dateFrom || dateTo
+                ? { border: '1px solid #fdba74', backgroundColor: '#fff7ed', color: '#c2410c' }
+                : { border: '1px solid var(--border)', backgroundColor: 'var(--background)', color: 'var(--muted-foreground)' }),
+            }}
+          >
+            <svg style={{ height: '10px', width: '10px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+            {dateFrom || dateTo ? `${dateFrom ? fmtDate(dateFrom) : '...'} – ${dateTo ? fmtDate(dateTo) : '...'}` : 'תאריכים'}
+          </button>
+          {hasFilters && <button onClick={clearFilters} style={{ borderRadius: '9999px', padding: '4px 10px', fontSize: '11px', fontWeight: 500, color: 'var(--destructive)', backgroundColor: 'transparent', border: 'none', cursor: 'pointer' }}>נקה הכל</button>}
         </div>
 
         {/* Table */}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 180px)" }}>
-          <table className="w-full table-fixed text-[11px] border-collapse">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-slate-800 text-white text-[10px]">
-                <th colSpan={9} className="py-1 text-center font-semibold border-l border-slate-600">פרטים אישיים</th>
-                <th colSpan={1} className="py-1 text-center font-semibold bg-blue-800 border-l border-blue-600">נוכחית</th>
-                <th colSpan={dates.length} className="py-1 text-center font-semibold bg-teal-800">משמרת עתידית</th>
+        <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 180px)' }}>
+          <table style={{ width: '100%', tableLayout: 'fixed', fontSize: '11px', borderCollapse: 'collapse' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
+              <tr style={{ backgroundColor: '#1e293b', color: 'white', fontSize: '10px' }}>
+                <th colSpan={9} style={{ padding: '4px 0', textAlign: 'center', fontWeight: 600, borderLeft: '1px solid #475569' }}>פרטים אישיים</th>
+                <th colSpan={1} style={{ padding: '4px 0', textAlign: 'center', fontWeight: 600, backgroundColor: '#1e40af', borderLeft: '1px solid #2563eb' }}>נוכחית</th>
+                <th colSpan={dates.length} style={{ padding: '4px 0', textAlign: 'center', fontWeight: 600, backgroundColor: '#115e59' }}>משמרת עתידית</th>
               </tr>
-              <tr className="bg-slate-700 text-white text-[10px]">
-                <th className="w-[30px] py-1.5 text-center">
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3 w-3 cursor-pointer" />
+              <tr style={{ backgroundColor: '#334155', color: 'white', fontSize: '10px' }}>
+                <th style={{ width: '30px', padding: '6px 0', textAlign: 'center' }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} style={{ height: '12px', width: '12px', cursor: 'pointer' }} />
                 </th>
-                <th className="w-[60px] py-1.5 text-right font-semibold px-1">מ.א.</th>
-                <th className="py-1.5 text-right font-semibold px-1">שם מלא</th>
-                <th className="w-[50px] py-1.5 text-right font-semibold px-1">דרגה</th>
-                <th className="w-[45px] py-1.5 text-right font-semibold px-1">שירות</th>
-                <th className="w-[42px] py-1.5 text-right font-semibold px-1">זירה</th>
-                <th className="w-[50px] py-1.5 text-right font-semibold px-1">ענף</th>
-                <th className="w-[48px] py-1.5 text-right font-semibold px-1">בסיס</th>
-                <th className="w-[28px] py-1.5 text-center font-semibold border-l border-slate-500" title="במשמרת">
-                  <svg className="inline h-3 w-3 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+                <th style={{ width: '60px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>מ.א.</th>
+                <th style={{ padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>שם מלא</th>
+                <th style={{ width: '50px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>דרגה</th>
+                <th style={{ width: '45px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>שירות</th>
+                <th style={{ width: '42px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>זירה</th>
+                <th style={{ width: '50px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>ענף</th>
+                <th style={{ width: '48px', padding: '6px 4px', textAlign: 'right', fontWeight: 600 }}>בסיס</th>
+                <th style={{ width: '28px', padding: '6px 0', textAlign: 'center', fontWeight: 600, borderLeft: '1px solid #64748b' }} title="במשמרת">
+                  <svg style={{ display: 'inline', height: '12px', width: '12px', opacity: 0.8 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
                 </th>
-                <th className="py-1 text-center font-semibold bg-blue-700 border-l border-blue-500">
-                  <div className="text-[10px]">היום</div>
-                  <div className="text-[8px] opacity-70">{dates.length > 0 ? fmtDate(dates[0]) : ""}</div>
+                <th style={{ padding: '4px 0', textAlign: 'center', fontWeight: 600, backgroundColor: '#1d4ed8', borderLeft: '1px solid #3b82f6' }}>
+                  <div style={{ fontSize: '10px' }}>היום</div>
+                  <div style={{ fontSize: '8px', opacity: 0.7 }}>{dates.length > 0 ? fmtDate(dates[0]) : ""}</div>
                 </th>
                 {dates.map((d, i) => (
-                  <th key={d} className="py-1 text-center font-semibold bg-teal-700 border-l border-teal-500">
-                    <div className="text-[10px]">{dayLabel(d, i, cfg)}</div>
-                    <div className="text-[8px] opacity-70">{fmtDate(d)}</div>
+                  <th key={d} style={{ padding: '4px 0', textAlign: 'center', fontWeight: 600, backgroundColor: '#0f766e', borderLeft: '1px solid #14b8a6' }}>
+                    <div style={{ fontSize: '10px' }}>{dayLabel(d, i, cfg)}</div>
+                    <div style={{ fontSize: '8px', opacity: 0.7 }}>{fmtDate(d)}</div>
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={10 + dates.length} className="px-4 py-12 text-center text-muted-foreground text-sm">אין רשומות להצגה</td></tr>
+                <tr><td colSpan={10 + dates.length} style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--muted-foreground)', fontSize: '14px' }}>אין רשומות להצגה</td></tr>
               ) : filtered.map((r, idx) => {
                 const sel = selected.has(r.personnel.id);
                 const c0 = r.current[0] || {} as RoutineEntry;
@@ -257,21 +288,31 @@ export default function CheckinPage() {
                 const cText = c0.entry_time ? `${c0.entry_time}-${c0.exit_time}` : "—";
                 const cMiss = !c0.entry_time;
                 const todayConflict = c0.entry_time !== f0.entry_time || c0.exit_time !== f0.exit_time;
+                const rowBg = sel ? '#eff6ff' : idx % 2 !== 0 ? 'color-mix(in srgb, var(--muted) 20%, transparent)' : undefined;
                 return (
-                  <tr key={r.personnel.id} className={`border-b border-border/40 transition-colors hover:bg-accent/40 ${sel ? "bg-blue-50 dark:bg-blue-950/20" : idx % 2 === 0 ? "" : "bg-muted/20"}`}>
-                    <td className="px-1 py-1.5 text-center"><input type="checkbox" checked={sel} onChange={() => toggleSelect(r.personnel.id)} className="h-3 w-3 cursor-pointer" /></td>
-                    <td className="px-1 py-1.5 font-mono text-[10px] text-muted-foreground truncate">{r.personnel.id}</td>
-                    <td className="px-1 py-1.5 font-medium text-foreground truncate">{r.personnel.name}</td>
-                    <td className="px-1 py-1.5 text-muted-foreground truncate">{r.personnel.rank}</td>
-                    <td className="px-1 py-1.5 text-muted-foreground truncate">{r.personnel.service_type}</td>
-                    <td className="px-1 py-1.5 text-muted-foreground truncate">{r.personnel.arena}</td>
-                    <td className="px-1 py-1.5 text-muted-foreground truncate">{r.personnel.branch}</td>
-                    <td className="px-1 py-1.5 text-muted-foreground truncate">{r.personnel.base}</td>
-                    <td className="px-1 py-1.5 text-center border-l border-border/40">
-                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${c0.on_shift ? "bg-emerald-500" : "bg-muted-foreground/30"}`} />
+                  <tr
+                    key={r.personnel.id}
+                    data-slot="checkin-row"
+                    style={{ borderBottom: '1px solid color-mix(in srgb, var(--border) 40%, transparent)', transition: 'background-color 150ms', backgroundColor: rowBg }}
+                  >
+                    <td style={{ padding: '4px', textAlign: 'center' }}><input type="checkbox" checked={sel} onChange={() => toggleSelect(r.personnel.id)} style={{ height: '12px', width: '12px', cursor: 'pointer' }} /></td>
+                    <td style={{ padding: '4px', fontSize: '10px', color: 'var(--muted-foreground)', ...S.mono, ...S.truncate }}>{r.personnel.id}</td>
+                    <td style={{ padding: '4px', fontWeight: 500, color: 'var(--foreground)', ...S.truncate }}>{r.personnel.name}</td>
+                    <td style={{ padding: '4px', color: 'var(--muted-foreground)', ...S.truncate }}>{r.personnel.rank}</td>
+                    <td style={{ padding: '4px', color: 'var(--muted-foreground)', ...S.truncate }}>{r.personnel.service_type}</td>
+                    <td style={{ padding: '4px', color: 'var(--muted-foreground)', ...S.truncate }}>{r.personnel.arena}</td>
+                    <td style={{ padding: '4px', color: 'var(--muted-foreground)', ...S.truncate }}>{r.personnel.branch}</td>
+                    <td style={{ padding: '4px', color: 'var(--muted-foreground)', ...S.truncate }}>{r.personnel.base}</td>
+                    <td style={{ padding: '4px', textAlign: 'center', borderLeft: '1px solid color-mix(in srgb, var(--border) 40%, transparent)' }}>
+                      <span style={{ display: 'inline-block', height: '10px', width: '10px', borderRadius: '9999px', backgroundColor: c0.on_shift ? '#10b981' : 'color-mix(in srgb, var(--muted-foreground) 30%, transparent)' }} />
                     </td>
-                    <td className={`px-1 py-1.5 text-center border-l border-blue-200/50 ${cMiss ? "bg-destructive/5 text-destructive/60" : todayConflict ? "bg-destructive/5" : "text-muted-foreground"}`}>
-                      <span className={todayConflict && !cMiss ? "text-destructive font-semibold" : ""}>{cMiss ? "—" : cText}</span>
+                    <td style={{
+                      padding: '4px', textAlign: 'center', borderLeft: '1px solid rgba(147,197,253,0.5)',
+                      ...(cMiss ? { backgroundColor: 'color-mix(in srgb, var(--destructive) 5%, transparent)', color: 'color-mix(in srgb, var(--destructive) 60%, transparent)' }
+                        : todayConflict ? { backgroundColor: 'color-mix(in srgb, var(--destructive) 5%, transparent)' }
+                        : { color: 'var(--muted-foreground)' }),
+                    }}>
+                      <span style={todayConflict && !cMiss ? { color: 'var(--destructive)', fontWeight: 600 } : undefined}>{cMiss ? "—" : cText}</span>
                     </td>
                     {dates.map((_, i) => {
                       const c = r.current[i] || {} as RoutineEntry;
@@ -280,8 +321,13 @@ export default function CheckinPage() {
                       const fMiss = !f2.entry_time;
                       const conflict = c.entry_time !== f2.entry_time || c.exit_time !== f2.exit_time;
                       return (
-                        <td key={i} className={`px-1 py-1.5 text-center border-l border-teal-200/30 ${fMiss ? "bg-destructive/5 text-destructive/60" : conflict ? "bg-destructive/5" : "text-muted-foreground"}`}>
-                          <span className={conflict && !fMiss ? "text-destructive font-semibold" : ""}>{fMiss ? "—" : fText}</span>
+                        <td key={i} style={{
+                          padding: '4px', textAlign: 'center', borderLeft: '1px solid rgba(94,234,212,0.3)',
+                          ...(fMiss ? { backgroundColor: 'color-mix(in srgb, var(--destructive) 5%, transparent)', color: 'color-mix(in srgb, var(--destructive) 60%, transparent)' }
+                            : conflict ? { backgroundColor: 'color-mix(in srgb, var(--destructive) 5%, transparent)' }
+                            : { color: 'var(--muted-foreground)' }),
+                        }}>
+                          <span style={conflict && !fMiss ? { color: 'var(--destructive)', fontWeight: 600 } : undefined}>{fMiss ? "—" : fText}</span>
                         </td>
                       );
                     })}
@@ -293,6 +339,9 @@ export default function CheckinPage() {
         </div>
       </Card>
 
+      {/* Filter Modal */}
+      <FilterModal open={filterOpen} onClose={() => setFilterOpen(false)} dateFrom={dateFrom} dateTo={dateTo} onApply={(df, dt) => { setDateFrom(df); setDateTo(dt); setFilterOpen(false); }} />
+
       {/* Upload Modal */}
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onUpload={handleUpload} onDownloadTemplate={downloadTemplate} dates={dates} records={records} />
 
@@ -302,23 +351,231 @@ export default function CheckinPage() {
   );
 }
 
+/* ── Hebrew Calendar helpers ── */
+const HEB_MONTHS = ["ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני", "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"];
+const HEB_DAYS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+
+function pad2(n: number) { return n < 10 ? `0${n}` : `${n}`; }
+function toISO(y: number, m: number, d: number) { return `${y}-${pad2(m + 1)}-${pad2(d)}`; }
+
+/* ── Filter Modal ── */
+function FilterModal({ open, onClose, dateFrom, dateTo, onApply }: {
+  open: boolean; onClose: () => void; dateFrom: string; dateTo: string;
+  onApply: (df: string, dt: string) => void;
+}) {
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [rangeStart, setRangeStart] = useState(dateFrom);
+  const [rangeEnd, setRangeEnd] = useState(dateTo);
+  const [picking, setPicking] = useState<"start" | "end">("start");
+
+  useEffect(() => {
+    if (open) {
+      setRangeStart(dateFrom);
+      setRangeEnd(dateTo);
+      setPicking("start");
+      if (dateFrom) {
+        const d = new Date(dateFrom);
+        setViewYear(d.getFullYear());
+        setViewMonth(d.getMonth());
+      } else {
+        setViewYear(today.getFullYear());
+        setViewMonth(today.getMonth());
+      }
+    }
+  }, [open, dateFrom, dateTo]);
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  }
+  function prevYear() { setViewYear(viewYear - 1); }
+  function nextYear() { setViewYear(viewYear + 1); }
+
+  function handleDayClick(iso: string) {
+    if (picking === "start") {
+      setRangeStart(iso);
+      setRangeEnd("");
+      setPicking("end");
+    } else {
+      if (iso < rangeStart) {
+        setRangeStart(iso);
+        setRangeEnd("");
+        setPicking("end");
+      } else {
+        setRangeEnd(iso);
+        setPicking("start");
+      }
+    }
+  }
+
+  // Build calendar grid
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const startDow = firstDay.getDay(); // 0=Sun
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const todayISO = toISO(today.getFullYear(), today.getMonth(), today.getDate());
+  const rs = rangeStart || "";
+  const re = rangeEnd || "";
+
+  const rangeLabel = rs && re
+    ? `${fmtDate(rs)} – ${fmtDate(re)}`
+    : rs
+      ? `${fmtDate(rs)} – בחר תאריך סיום`
+      : "בחר טווח תאריכים";
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent style={{ maxWidth: '24rem', padding: 0, gap: 0 }}>
+        <DialogHeader style={{ background: 'linear-gradient(to left, #334155, #1e293b)', padding: '16px 24px', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'white' }}>
+            <svg style={{ height: '20px', width: '20px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+            <div><div style={{ fontSize: '16px', fontWeight: 700 }}>סינון לפי תאריכים</div></div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div style={{ padding: '16px 20px' }}>
+          {/* Range display */}
+          <div style={{ textAlign: 'center', padding: '8px', marginBottom: '12px', borderRadius: '8px', backgroundColor: rs ? '#eff6ff' : 'var(--secondary)', fontSize: '13px', fontWeight: 500, color: rs ? '#1d4ed8' : 'var(--muted-foreground)' }}>
+            {rangeLabel}
+          </div>
+
+          {/* Year navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '4px' }}>
+            <button onClick={nextYear} style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted-foreground)', fontSize: '12px' }}>«</button>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--foreground)', minWidth: '40px', textAlign: 'center' }}>{viewYear}</span>
+            <button onClick={prevYear} style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--muted-foreground)', fontSize: '12px' }}>»</button>
+          </div>
+
+          {/* Month navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <button onClick={prevMonth} style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--muted-foreground)' }}>
+              <svg style={{ height: '16px', width: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M9 18l6-6-6-6" /></svg>
+            </button>
+            <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--foreground)' }}>{HEB_MONTHS[viewMonth]}</span>
+            <button onClick={nextMonth} style={{ backgroundColor: 'transparent', border: 'none', cursor: 'pointer', padding: '6px', color: 'var(--muted-foreground)' }}>
+              <svg style={{ height: '16px', width: '16px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '4px' }}>
+            {HEB_DAYS.map((d) => (
+              <div key={d} style={{ textAlign: 'center', fontSize: '11px', fontWeight: 600, color: 'var(--muted-foreground)', padding: '4px 0' }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+            {cells.map((day, i) => {
+              if (day === null) return <div key={i} />;
+              const iso = toISO(viewYear, viewMonth, day);
+              const isToday = iso === todayISO;
+              const isStart = iso === rs;
+              const isEnd = iso === re;
+              const inRange = rs && re && iso >= rs && iso <= re;
+              const isEdge = isStart || isEnd;
+
+              let bg = 'transparent';
+              let color = 'var(--foreground)';
+              let fontWeight = 400;
+              let borderRadius = '6px';
+
+              if (isEdge) {
+                bg = '#1d4ed8';
+                color = 'white';
+                fontWeight = 700;
+              } else if (inRange) {
+                bg = '#dbeafe';
+                color = '#1e40af';
+                fontWeight = 500;
+                borderRadius = '0';
+              }
+
+              if (isStart && re) borderRadius = '0 6px 6px 0';
+              if (isEnd) borderRadius = '6px 0 0 6px';
+              if (isStart && !re) borderRadius = '6px';
+              if (isStart && isEnd) borderRadius = '6px';
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => handleDayClick(iso)}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '13px',
+                    fontWeight,
+                    backgroundColor: bg,
+                    color,
+                    border: isToday && !isEdge ? '2px solid #3b82f6' : 'none',
+                    borderRadius,
+                    cursor: 'pointer',
+                    transition: 'background-color 100ms',
+                  }}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <DialogFooter style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border)', padding: '12px 20px' }}>
+          {(rangeStart || rangeEnd) ? (
+            <button onClick={() => { setRangeStart(""); setRangeEnd(""); onApply("", ""); }} style={{ fontSize: '12px', color: 'var(--destructive)', backgroundColor: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 500 }}>נקה סינון</button>
+          ) : <span />}
+          <Button onClick={() => onApply(rangeStart, rangeEnd)} disabled={!!(rangeStart && !rangeEnd)}>החל סינון</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* ── Filter Chip ── */
 function FilterChip({ label, value, options, onChange, activeColor }: { label: string; value: string; options: string[]; onChange: (v: string) => void; activeColor: string }) {
   const active = value !== "הכל";
-  const colors: Record<string, string> = {
-    blue: active ? "border-blue-300 bg-blue-50 text-blue-700" : "",
-    purple: active ? "border-purple-300 bg-purple-50 text-purple-700" : "",
+  const colorMap: Record<string, React.CSSProperties> = {
+    blue: { borderColor: '#93c5fd', backgroundColor: '#eff6ff', color: '#1d4ed8' },
+    purple: { borderColor: '#d8b4fe', backgroundColor: '#faf5ff', color: '#7e22ce' },
   };
+  const activeStyle: React.CSSProperties = active ? (colorMap[activeColor] || {}) : {};
+  const inactiveStyle: React.CSSProperties = !active ? { borderColor: 'var(--border)', backgroundColor: 'var(--background)', color: 'var(--muted-foreground)' } : {};
   return (
-    <div className="relative inline-flex">
+    <div style={{ position: 'relative', display: 'inline-flex' }}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`appearance-none cursor-pointer rounded-full border py-1 pr-3 pl-6 text-[11px] font-medium transition-all focus:outline-none ${colors[activeColor] || (active ? "" : "border-border bg-background text-muted-foreground hover:text-foreground")}`}
+        style={{
+          WebkitAppearance: 'none',
+          appearance: 'none',
+          cursor: 'pointer',
+          borderRadius: '9999px',
+          border: '1px solid',
+          padding: '4px 12px 4px 24px',
+          fontSize: '11px',
+          fontWeight: 500,
+          transition: 'all 150ms',
+          outline: 'none',
+          ...inactiveStyle,
+          ...activeStyle,
+        }}
       >
         {options.map((o) => <option key={o} value={o}>{o === "הכל" ? `${label}: הכל` : `${label}: ${o}`}</option>)}
       </select>
-      <svg className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
+      <svg style={{ pointerEvents: 'none', position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', height: '12px', width: '12px', color: 'var(--muted-foreground)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" /></svg>
     </div>
   );
 }
@@ -329,56 +586,50 @@ function UploadModal({ open, onClose, onUpload, onDownloadTemplate, dates, recor
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg p-0 gap-0">
-        <DialogHeader className="bg-gradient-to-l from-slate-700 to-slate-800 px-6 py-5 text-white rounded-t-lg">
-          <DialogTitle className="flex items-center gap-4 text-white">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+      <DialogContent style={{ maxWidth: '32rem', padding: 0, gap: 0 }}>
+        <DialogHeader style={{ background: 'linear-gradient(to left, #334155, #1e293b)', padding: '20px 24px', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'white' }}>
+            <div style={{ display: 'flex', height: '48px', width: '48px', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', backgroundColor: 'rgba(255,255,255,0.2)' }}>
+              <svg style={{ height: '24px', width: '24px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
             </div>
-            <div><div className="text-lg font-bold">העלאת משמרת עתידית</div><p className="text-sm opacity-70 font-normal">העלה קובץ אקסל עם נתוני משמרות עתידיות</p></div>
+            <div><div style={{ fontSize: '18px', fontWeight: 700 }}>העלאת משמרת עתידית</div><p style={{ fontSize: '14px', opacity: 0.7, fontWeight: 400 }}>העלה קובץ אקסל עם נתוני משמרות עתידיות</p></div>
           </DialogTitle>
         </DialogHeader>
-        <div className="px-6 py-5 space-y-4">
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">תבנית קובץ לדוגמה</h3>
-              <Button variant="secondary" size="sm" className="text-[11px] gap-1.5" onClick={onDownloadTemplate}>
-                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                הורד תבנית
-              </Button>
-            </div>
-            <Card className="overflow-hidden p-0">
-              <Table className="text-xs">
+            <h3 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--muted-foreground)', textTransform: 'uppercase', letterSpacing: '0.025em', marginBottom: '8px' }}>תבנית קובץ לדוגמה</h3>
+            <Card style={{ overflow: 'hidden', padding: 0 }}>
+              <Table style={{ fontSize: '12px' }}>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead className="text-right px-3 py-2 text-[11px]">מ.א.</TableHead>
-                    {dates.slice(0, 4).map((d) => <TableHead key={d} className="text-center px-3 py-2 text-[11px]">{fmtDate(d)}</TableHead>)}
-                    {dates.length > 4 && <TableHead className="text-center px-3 py-2 text-[11px] text-muted-foreground">...</TableHead>}
+                  <TableRow style={{ backgroundColor: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}>
+                    <TableHead style={{ textAlign: 'right', padding: '8px 12px', fontSize: '11px' }}>מ.א.</TableHead>
+                    {dates.slice(0, 4).map((d) => <TableHead key={d} style={{ textAlign: 'center', padding: '8px 12px', fontSize: '11px' }}>{fmtDate(d)}</TableHead>)}
+                    {dates.length > 4 && <TableHead style={{ textAlign: 'center', padding: '8px 12px', fontSize: '11px', color: 'var(--muted-foreground)' }}>...</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {[0, 1].map((i) => (
                     <TableRow key={i}>
-                      <TableCell className="px-3 py-1.5 font-mono text-muted-foreground">{records[i]?.personnel.id || `10000${i}`}</TableCell>
-                      {dates.slice(0, 4).map((d) => <TableCell key={d} className="px-3 py-1.5 text-center text-muted-foreground">{i === 0 ? "07:00-17:00" : "08:30-19:00"}</TableCell>)}
-                      {dates.length > 4 && <TableCell className="px-3 py-1.5 text-center text-muted-foreground">...</TableCell>}
+                      <TableCell style={{ padding: '6px 12px', ...S.mono, color: 'var(--muted-foreground)' }}>{records[i]?.personnel.id || `10000${i}`}</TableCell>
+                      {dates.slice(0, 4).map((d) => <TableCell key={d} style={{ padding: '6px 12px', textAlign: 'center', color: 'var(--muted-foreground)' }}>{i === 0 ? "07:00-17:00" : "08:30-19:00"}</TableCell>)}
+                      {dates.length > 4 && <TableCell style={{ padding: '6px 12px', textAlign: 'center', color: 'var(--muted-foreground)' }}>...</TableCell>}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </Card>
-            <p className="mt-2 text-[10px] text-muted-foreground">עמודת מ.א. + עמודה לכל תאריך (DD/MM). בכל תא יש להזין שעת כניסה ויציאה (לדוגמה: 07:00-17:00). תאים ריקים יידלגו.</p>
+            <p style={{ marginTop: '8px', fontSize: '10px', color: 'var(--muted-foreground)' }}>עמודת מ.א. + עמודה לכל תאריך (DD/MM). בכל תא יש להזין שעת כניסה ויציאה (לדוגמה: 07:00-17:00). תאים ריקים יידלגו.</p>
           </div>
-          <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30 py-8 cursor-pointer hover:border-primary/40 hover:bg-accent/30 transition-colors">
-            <svg className="h-8 w-8 text-muted-foreground mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-            <span className="text-sm font-medium text-foreground">לחץ לבחירת קובץ או גרור לכאן</span>
-            <span className="text-xs text-muted-foreground mt-1">Excel (.xlsx, .xls) או CSV</span>
-            <input type="file" accept=".xlsx,.xls,.csv" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { if (e.target.files?.[0]) onUpload(e.target.files[0]); }} />
+          <label
+            data-slot="drop-zone"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', border: '2px dashed var(--border)', backgroundColor: 'color-mix(in srgb, var(--muted) 30%, transparent)', padding: '32px 0', cursor: 'pointer', transition: 'border-color 150ms, background-color 150ms', position: 'relative' }}
+          >
+            <svg style={{ height: '32px', width: '32px', color: 'var(--muted-foreground)', marginBottom: '8px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--foreground)' }}>לחץ לבחירת קובץ או גרור לכאן</span>
+            <span style={{ fontSize: '12px', color: 'var(--muted-foreground)', marginTop: '4px' }}>Excel (.xlsx, .xls) או CSV</span>
+            <input type="file" accept=".xlsx,.xls,.csv" style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} onChange={(e) => { if (e.target.files?.[0]) onUpload(e.target.files[0]); }} />
           </label>
         </div>
-        <DialogFooter className="border-t px-6 py-4">
-          <Button variant="outline" onClick={onClose}>ביטול</Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -392,7 +643,6 @@ function EditModal({ open, onClose, editIds, records, dates, cfg, onSave }: {
   const rec = !isBulk ? records.find((r) => r.personnel.id === editIds[0]) : null;
   const [saving, setSaving] = useState(false);
 
-  // Edit state for day entries
   const [curEntries, setCurEntries] = useState<{ e: string; x: string }[]>([]);
   const [futEntries, setFutEntries] = useState<{ e: string; x: string }[]>([]);
 
@@ -411,26 +661,20 @@ function EditModal({ open, onClose, editIds, records, dates, cfg, onSave }: {
     setSaving(true);
     try {
       if (isBulk) {
-        // Bulk: current today
         if (curEntries[0]?.e || curEntries[0]?.x) {
           await apiFetch("/routine/current/bulk", { method: "POST", body: JSON.stringify({ person_ids: editIds, entries: [{ person_id: "", date: dates[0], entry_time: curEntries[0].e, exit_time: curEntries[0].x, on_shift: curEntries[0].e ? 1 : 0 }] }) });
         }
-        // Bulk: future
         const futE = futEntries.filter((f, i) => f.e || f.x).map((f, i) => ({ person_id: "", date: dates[i], entry_time: f.e, exit_time: f.x, on_shift: f.e ? 1 : 0 }));
         if (futE.length) await apiFetch("/routine/future/bulk", { method: "POST", body: JSON.stringify({ person_ids: editIds, entries: futE }) });
-        toast.success(`${editIds.length} רשומות עודכנו`);
       } else if (rec) {
-        // Single: current today
         await apiFetch(`/routine/current/${rec.personnel.id}/${dates[0]}`, { method: "PUT", body: JSON.stringify({ person_id: rec.personnel.id, date: dates[0], entry_time: curEntries[0].e, exit_time: curEntries[0].x, on_shift: curEntries[0].e ? 1 : 0 }) });
-        // Single: future all
         for (let i = 0; i < dates.length; i++) {
           await apiFetch(`/routine/future/${rec.personnel.id}/${dates[i]}`, { method: "PUT", body: JSON.stringify({ person_id: rec.personnel.id, date: dates[i], entry_time: futEntries[i].e, exit_time: futEntries[i].x, on_shift: futEntries[i].e ? 1 : 0 }) });
         }
-        toast.success("הרשומה עודכנה");
       }
       await onSave();
       onClose();
-    } catch { toast.error("שגיאה בשמירה"); }
+    } catch {}
     setSaving(false);
   }
 
@@ -439,46 +683,45 @@ function EditModal({ open, onClose, editIds, records, dates, cfg, onSave }: {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="bg-gradient-to-l from-slate-700 to-slate-800 px-6 py-5 text-white rounded-t-lg">
-          <DialogTitle className="flex items-center gap-4 text-white">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+      <DialogContent style={{ maxWidth: '42rem', maxHeight: '85vh', display: 'flex', flexDirection: 'column', padding: 0, gap: 0 }}>
+        <DialogHeader style={{ background: 'linear-gradient(to left, #334155, #1e293b)', padding: '20px 24px', color: 'white', borderTopLeftRadius: '8px', borderTopRightRadius: '8px' }}>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: '16px', color: 'white' }}>
+            <div style={{ display: 'flex', height: '48px', width: '48px', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px', backgroundColor: 'rgba(255,255,255,0.2)', fontSize: '18px', fontWeight: 700 }}>
               {isBulk ? (
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                <svg style={{ height: '24px', width: '24px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
               ) : rec?.personnel.name.charAt(0)}
             </div>
             <div>
-              <div className="text-lg font-bold">{isBulk ? "עריכה קבוצתית" : rec?.personnel.name}</div>
-              <p className="text-sm opacity-70 font-normal">{isBulk ? `${editIds.length} רשומות נבחרו` : `מ.א. ${rec?.personnel.id}`}</p>
+              <div style={{ fontSize: '18px', fontWeight: 700 }}>{isBulk ? "עריכה קבוצתית" : rec?.personnel.name}</div>
+              <p style={{ fontSize: '14px', opacity: 0.7, fontWeight: 400 }}>{isBulk ? `${editIds.length} רשומות נבחרו` : `מ.א. ${rec?.personnel.id}`}</p>
             </div>
           </DialogTitle>
         </DialogHeader>
 
         {isBulk && (
-          <div className="border-b px-6 py-3 bg-muted/50">
-            <div className="flex flex-wrap gap-1.5">
-              {names.map((n) => <Badge key={n} variant="secondary" className="text-[11px]">{n}</Badge>)}
-              {more > 0 && <Badge variant="outline" className="text-[11px]">+{more} נוספים</Badge>}
+          <div style={{ borderBottom: '1px solid var(--border)', padding: '12px 24px', backgroundColor: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {names.map((n) => <Badge key={n} variant="secondary" style={{ fontSize: '11px' }}>{n}</Badge>)}
+              {more > 0 && <Badge variant="outline" style={{ fontSize: '11px' }}>+{more} נוספים</Badge>}
             </div>
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {isBulk && <p className="text-xs text-muted-foreground">שעות שימולאו יוחלו על כל הרשומות. שדות ריקים לא ישתנו.</p>}
+        <div style={{ flex: '1 1 0%', overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {isBulk && <p style={{ fontSize: '12px', color: 'var(--muted-foreground)' }}>שעות שימולאו יוחלו על כל הרשומות. שדות ריקים לא ישתנו.</p>}
 
           <div>
-            <h3 className="text-xs font-semibold text-blue-600 mb-2">משמרת נוכחית (היום)</h3>
+            <h3 style={{ fontSize: '12px', fontWeight: 600, color: '#2563eb', marginBottom: '8px' }}>משמרת נוכחית (היום)</h3>
             <RoutineTable entries={curEntries} dates={dates.length > 0 ? [dates[0]] : []} cfg={cfg} onChange={setCurEntries} />
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-teal-600 mb-2">משמרת עתידית</h3>
+            <h3 style={{ fontSize: '12px', fontWeight: 600, color: '#0d9488', marginBottom: '8px' }}>משמרת עתידית</h3>
             <RoutineTable entries={futEntries} dates={dates} cfg={cfg} onChange={setFutEntries} />
           </div>
         </div>
 
-        <DialogFooter className="grid grid-cols-2 gap-3 border-t px-6 py-4">
-          <Button variant="outline" onClick={onClose} disabled={saving}>ביטול</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? "שומר..." : isBulk ? `החל על ${editIds.length} רשומות` : "שמור שינויים"}</Button>
+        <DialogFooter style={{ borderTop: '1px solid var(--border)', padding: '16px 24px' }}>
+          <Button style={{ width: '100%' }} onClick={handleSave} disabled={saving}>{saving ? "שומר..." : isBulk ? `החל על ${editIds.length} רשומות` : "שמור שינויים"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -495,23 +738,23 @@ function RoutineTable({ entries, dates, cfg, onChange }: {
     onChange(next);
   }
   return (
-    <Card className="overflow-hidden p-0">
-      <Table className="text-sm">
+    <Card style={{ overflow: 'hidden', padding: 0 }}>
+      <Table style={{ fontSize: '14px' }}>
         <TableHeader>
-          <TableRow className="bg-muted/50">
-            <TableHead className="text-right px-3 py-2 text-[11px]">יום</TableHead>
-            <TableHead className="text-right px-3 py-2 text-[11px]">תאריך</TableHead>
-            <TableHead className="text-center px-3 py-2 text-[11px]">כניסה</TableHead>
-            <TableHead className="text-center px-3 py-2 text-[11px]">יציאה</TableHead>
+          <TableRow style={{ backgroundColor: 'color-mix(in srgb, var(--muted) 50%, transparent)' }}>
+            <TableHead style={{ textAlign: 'right', padding: '8px 12px', fontSize: '11px' }}>יום</TableHead>
+            <TableHead style={{ textAlign: 'right', padding: '8px 12px', fontSize: '11px' }}>תאריך</TableHead>
+            <TableHead style={{ textAlign: 'center', padding: '8px 12px', fontSize: '11px' }}>כניסה</TableHead>
+            <TableHead style={{ textAlign: 'center', padding: '8px 12px', fontSize: '11px' }}>יציאה</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {dates.map((d, i) => (
             <TableRow key={d}>
-              <TableCell className="px-3 py-2 font-medium text-[13px]">{dayLabel(d, i, cfg)}</TableCell>
-              <TableCell className="px-3 py-2 text-muted-foreground text-xs">{fmtDate(d)}</TableCell>
-              <TableCell className="px-2 py-1.5 text-center"><TimeInput value={entries[i]?.e || ""} onChange={(v) => update(i, "e", v)} /></TableCell>
-              <TableCell className="px-2 py-1.5 text-center"><TimeInput value={entries[i]?.x || ""} onChange={(v) => update(i, "x", v)} /></TableCell>
+              <TableCell style={{ padding: '8px 12px', fontWeight: 500, fontSize: '13px' }}>{dayLabel(d, i, cfg)}</TableCell>
+              <TableCell style={{ padding: '8px 12px', color: 'var(--muted-foreground)', fontSize: '12px' }}>{fmtDate(d)}</TableCell>
+              <TableCell style={{ padding: '6px 8px', textAlign: 'center' }}><TimeInput value={entries[i]?.e || ""} onChange={(v) => update(i, "e", v)} /></TableCell>
+              <TableCell style={{ padding: '6px 8px', textAlign: 'center' }}><TimeInput value={entries[i]?.x || ""} onChange={(v) => update(i, "x", v)} /></TableCell>
             </TableRow>
           ))}
         </TableBody>

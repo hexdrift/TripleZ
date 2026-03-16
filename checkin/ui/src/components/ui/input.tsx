@@ -1,18 +1,26 @@
 import * as React from "react"
 
-import { cn } from "@/lib/utils"
+const inputBase: React.CSSProperties = {
+  height: '36px',
+  width: '100%',
+  minWidth: 0,
+  borderRadius: '12px',
+  border: '1px solid color-mix(in srgb, var(--input) 90%, transparent)',
+  backgroundColor: 'color-mix(in srgb, var(--background) 75%, transparent)',
+  padding: '4px 12px',
+  fontSize: '14px',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.72), 0 12px 26px -24px rgba(15,23,42,0.45)',
+  backdropFilter: 'blur(4px)',
+  transition: 'color 150ms, box-shadow 150ms, border-color 150ms, background-color 150ms',
+  outline: 'none',
+}
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ style, type, ...props }: React.ComponentProps<"input">) {
   return (
     <input
       type={type}
       data-slot="input"
-      className={cn(
-        "h-9 w-full min-w-0 rounded-xl border border-input/90 bg-background/75 px-3 py-1 text-base shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_12px_26px_-24px_rgba(15,23,42,0.45)] backdrop-blur-sm transition-[color,box-shadow,border-color,background-color] outline-none selection:bg-primary selection:text-primary-foreground file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground/90 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/35",
-        "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        "aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40",
-        className
-      )}
+      style={{ ...inputBase, ...style }}
       {...props}
     />
   )

@@ -1,66 +1,94 @@
-import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
-import { Slot } from "radix-ui";
+import * as React from "react"
+import { Slot } from "radix-ui"
 
-import { cn } from "@/lib/utils";
+const buttonBase: React.CSSProperties = {
+  display: 'inline-flex',
+  flexShrink: 0,
+  userSelect: 'none',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+  borderRadius: '6px',
+  border: '1px solid transparent',
+  fontSize: '14px',
+  fontWeight: 500,
+  whiteSpace: 'nowrap',
+  outline: 'none',
+  cursor: 'pointer',
+  transition: 'transform 75ms ease-out, background-color 75ms ease-out, color 75ms ease-out, border-color 75ms ease-out, box-shadow 75ms ease-out, opacity 75ms ease-out',
+}
 
-const buttonVariants = cva(
-  "inline-flex shrink-0 select-none items-center justify-center gap-2 rounded-md border border-transparent text-sm font-medium whitespace-nowrap outline-none cursor-pointer transform-gpu transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-75 ease-out active:scale-[0.97] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-  {
-    variants: {
-      variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:bg-destructive/60 dark:focus-visible:ring-destructive/40",
-        outline:
-          "border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-        ghost:
-          "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
-        link: "h-auto border-none px-0 py-0 text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-7 gap-1 rounded-md px-2.5 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 gap-1.5 rounded-md px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-5 has-[>svg]:px-4",
-        icon: "size-9 rounded-md",
-        "icon-xs": "size-7 rounded-md [&_svg:not([class*='size-'])]:size-3.5",
-        "icon-sm": "size-8 rounded-md",
-        "icon-lg": "size-10 rounded-md",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
+const variantStyles: Record<string, React.CSSProperties> = {
+  default: {
+    backgroundColor: 'var(--primary)',
+    color: 'var(--primary-foreground)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
   },
-);
+  destructive: {
+    backgroundColor: 'var(--destructive)',
+    color: 'white',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+  outline: {
+    borderColor: 'var(--input)',
+    backgroundColor: 'var(--background)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+  secondary: {
+    backgroundColor: 'var(--secondary)',
+    color: 'var(--secondary-foreground)',
+    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+  },
+  ghost: {
+    backgroundColor: 'transparent',
+  },
+  link: {
+    height: 'auto',
+    border: 'none',
+    padding: 0,
+    color: 'var(--primary)',
+    textUnderlineOffset: '4px',
+  },
+}
+
+const sizeStyles: Record<string, React.CSSProperties> = {
+  default: { height: '36px', padding: '8px 16px' },
+  xs: { height: '28px', gap: '4px', padding: '4px 10px', fontSize: '12px' },
+  sm: { height: '32px', gap: '6px', padding: '4px 12px' },
+  lg: { height: '40px', padding: '8px 20px' },
+  icon: { width: '36px', height: '36px', padding: '0' },
+  "icon-xs": { width: '28px', height: '28px', padding: '0' },
+  "icon-sm": { width: '32px', height: '32px', padding: '0' },
+  "icon-lg": { width: '40px', height: '40px', padding: '0' },
+}
 
 function Button({
-  className,
   variant = "default",
   size = "default",
   asChild = false,
+  style,
   ...props
-}: React.ComponentProps<"button"> &
-  VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
-  }) {
-  const Comp = asChild ? Slot.Root : "button";
-
+}: React.ComponentProps<"button"> & {
+  variant?: string
+  size?: string
+  asChild?: boolean
+}) {
+  const Comp = asChild ? Slot.Root : "button"
   return (
     <Comp
       {...(!asChild ? { type: "button" as const } : {})}
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      style={{
+        ...buttonBase,
+        ...(variantStyles[variant || 'default'] || variantStyles.default),
+        ...(sizeStyles[size || 'default'] || sizeStyles.default),
+        ...style,
+      }}
       {...props}
     />
-  );
+  )
 }
 
-export { Button, buttonVariants };
+export { Button }
