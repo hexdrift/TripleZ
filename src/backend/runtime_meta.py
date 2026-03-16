@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.backend.store.base import RemoteStore
+from src.backend.settings import load_settings, save_settings
 
 SYNC_STATUS_KEY = "personnel_sync_status"
 
@@ -141,6 +142,108 @@ def append_audit_event(
     }
     store.insert("audit_log", row)
     return row
+
+
+MAX_AUDIT_ENTRIES = 500
+
+
+def save_audit_snapshot(
+    store: RemoteStore,
+    event_id: str,
+    table_names: list[str],
+) -> str:
+    """Snapshot one or more tables and link them to an audit event.
+
+    Returns the snapshot_id prefix used for all rows.
+    """
+    sid = uuid.uuid4().hex
+    for tname in table_names:
+        if tname == "settings":
+            data = load_settings()
+        else:
+            data = store.get_all(tname)
+        store.insert(
+            "audit_snapshots",
+            {
+                "snapshot_id": f"{sid}__{tname}",
+                "event_id": event_id,
+                "table_name": tname,
+                "data": json.dumps(data, ensure_ascii=False, separators=(",", ":")),
+            },
+        )
+    return sid
+
+
+def restore_audit_snapshot(store: RemoteStore, event_id: str) -> bool:
+    """Restore tables from a snapshot linked to an audit event.
+
+    Returns True if any snapshot rows were found and restored.
+    """
+    all_snaps = [
+        s for s in store.get_all("audit_snapshots")
+        if s.get("event_id") == event_id
+    ]
+    if not all_snaps:
+        return False
+    for snap in all_snaps:
+        tname = snap["table_name"]
+        data_raw = snap.get("data", "[]")
+        data = json.loads(data_raw) if isinstance(data_raw, str) else data_raw
+        if tname == "settings":
+            # Restore settings file
+            if isinstance(data, dict):
+                save_settings(data)
+        else:
+            # Wipe current table and re-insert snapshot rows
+            for existing in store.get_all(tname):
+                pk = _table_pk(tname, existing)
+                if pk is not None:
+                    store.delete(tname, pk)
+            for row in data:
+                store.insert(tname, row)
+    return True
+
+
+def delete_audit_snapshots(store: RemoteStore, event_id: str) -> None:
+    """Remove all snapshot rows linked to an audit event."""
+    for snap in store.get_all("audit_snapshots"):
+        if snap.get("event_id") == event_id:
+            store.delete("audit_snapshots", snap["snapshot_id"])
+
+
+def prune_audit_log(store: RemoteStore, max_entries: int = MAX_AUDIT_ENTRIES) -> int:
+    """Auto-prune oldest audit entries (and their snapshots) beyond max_entries.
+
+    Returns the number of entries pruned.
+    """
+    rows = sorted(
+        store.get_all("audit_log"),
+        key=lambda r: str(r.get("created_at", "")),
+        reverse=True,
+    )
+    pruned = 0
+    for row in rows[max_entries:]:
+        eid = str(row.get("event_id", ""))
+        delete_audit_snapshots(store, eid)
+        store.delete("audit_log", eid)
+        pruned += 1
+    return pruned
+
+
+def _table_pk(table_name: str, row: dict) -> str | None:
+    """Return the primary key value for a row given its table name."""
+    pk_map = {
+        "rooms": "room_id",
+        "personnel": "person_id",
+        "saved_assignments": "person_id",
+        "audit_log": "event_id",
+        "audit_snapshots": "snapshot_id",
+        "app_meta": "key",
+    }
+    pk_col = pk_map.get(table_name)
+    if pk_col and pk_col in row:
+        return str(row[pk_col])
+    return None
 
 
 def list_audit_events(store: RemoteStore, *, limit: int = 50) -> list[dict[str, Any]]:

@@ -6,6 +6,7 @@ import base64
 import io
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
@@ -29,8 +30,12 @@ from src.backend.auth_session import AuthSession, require_admin, require_admin_o
 from src.backend.dependencies import bump_version, core, get_data_version, mutation_lock, store
 from src.backend.runtime_meta import (
     append_audit_event,
+    delete_audit_snapshots,
     get_sync_status,
     list_audit_events,
+    prune_audit_log,
+    restore_audit_snapshot,
+    save_audit_snapshot,
     update_sync_status,
 )
 from src.backend.schemas import (
@@ -686,6 +691,9 @@ def run_personnel_sync_from_configured_source(
 
     update_sync_status(store, **_sync_status_base_update(trigger=trigger))
 
+    snapshot_event_id = uuid.uuid4().hex
+    save_audit_snapshot(store, snapshot_event_id, ["personnel", "rooms", "saved_assignments"])
+
     try:
         result = load_personnel_from_url_source(safe_url)
     except Exception as exc:
@@ -705,6 +713,7 @@ def run_personnel_sync_from_configured_source(
             message=f"סנכרון כוח אדם נכשל ({trigger})",
             details={"trigger": trigger, "error": str(exc), "url": safe_url},
         )
+        prune_audit_log(store)
         raise
 
     update_sync_status(
@@ -726,6 +735,7 @@ def run_personnel_sync_from_configured_source(
         sync_audit_details["removed_occupants"] = result["removed_occupants"]["items"]
     if result.get("auto_reassigned"):
         sync_audit_details["auto_reassigned"] = result["auto_reassigned"]
+    sync_audit_details["snapshot_event_id"] = snapshot_event_id
     append_audit_event(
         store,
         actor_role=actor_role,
@@ -736,6 +746,7 @@ def run_personnel_sync_from_configured_source(
         message=f"סנכרון כוח אדם הושלם ({trigger})",
         details=sync_audit_details,
     )
+    prune_audit_log(store)
     return result
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin_or_api_key)])
@@ -757,6 +768,8 @@ def admin_load_rooms(
     try:
         df = pd.DataFrame([model_to_dict(r) for r in req.rooms])
         unknown = _validate_occupant_ids(df)
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["rooms", "saved_assignments"])
         with mutation_lock():
             core.load_rooms(df)
             _purge_orphan_saved_assignments()
@@ -770,8 +783,9 @@ def admin_load_rooms(
             entity_type="rooms",
             entity_id="bulk",
             message="נטענה רשימת חדרים מלאה",
-            details={"count": len(df), "warnings": warnings.get("warnings", {})},
+            details={"count": len(df), "warnings": warnings.get("warnings", {}), "snapshot_event_id": snapshot_event_id},
         )
+        prune_audit_log(store)
         return {"ok": True, **warnings}
     except HTTPException:
         raise
@@ -793,6 +807,8 @@ def admin_upsert_rooms(
         Dict with counts of updated, added, and total rooms.
     """
     try:
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["rooms", "saved_assignments"])
         with mutation_lock():
             _assert_expected_version(req.expected_version)
             df = pd.DataFrame([model_to_dict(r, exclude_unset=True) for r in req.rooms])
@@ -803,6 +819,7 @@ def admin_upsert_rooms(
             bump_version()
             if integrity_report.get("has_changes"):
                 result["integrity_report"] = integrity_report
+        result["snapshot_event_id"] = snapshot_event_id
         append_audit_event(
             store,
             actor_role=session.role,
@@ -813,6 +830,7 @@ def admin_upsert_rooms(
             message="חדרים עודכנו ידנית",
             details=result,
         )
+        prune_audit_log(store)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=_he_error(e))
@@ -833,12 +851,15 @@ def admin_load_personnel(
     """
     try:
         df = pd.DataFrame([model_to_dict(p) for p in req.personnel])
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["personnel", "rooms", "saved_assignments"])
         result = load_personnel_dataframe(df)
         if result["changed"] or result["room_state_changed"]:
             bump_version()
         audit_details: dict = {
             "count": result["count"],
             "integrity_report": result["integrity_report"],
+            "snapshot_event_id": snapshot_event_id,
         }
         if result.get("removed_occupants"):
             audit_details["removed_occupants"] = result["removed_occupants"]["items"]
@@ -854,6 +875,7 @@ def admin_load_personnel(
             message="רשימת כוח האדם הוחלפה ידנית",
             details=audit_details,
         )
+        prune_audit_log(store)
         response: dict = {
             "ok": True,
             "count": result["count"],
@@ -895,8 +917,9 @@ def admin_create_personnel(
             entity_type="personnel",
             entity_id=person_id,
             message="נוסף איש כוח אדם ידנית",
-            details={"person_id": person_id},
+            details={"person_id": person_id, "previous_state": {"created": True}},
         )
+        prune_audit_log(store)
         return SimpleOK(ok=True)
     except Exception as e:
         raise HTTPException(status_code=400, detail=_he_error(e))
@@ -932,6 +955,8 @@ async def upload_rooms_file(
             df["occupant_ids"] = [[] for _ in range(len(df))]
 
         unknown = _validate_occupant_ids(df)
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["rooms", "saved_assignments"])
         with mutation_lock():
             core.load_rooms(df)
             _purge_orphan_saved_assignments()
@@ -945,8 +970,9 @@ async def upload_rooms_file(
             entity_type="rooms",
             entity_id=file.filename or "upload",
             message="קובץ חדרים נטען",
-            details={"count": len(df), "warnings": warnings.get("warnings", {})},
+            details={"count": len(df), "warnings": warnings.get("warnings", {}), "snapshot_event_id": snapshot_event_id},
         )
+        prune_audit_log(store)
         return {"ok": True, "count": len(df), **warnings}
     except HTTPException:
         raise
@@ -969,6 +995,8 @@ def set_room_department(
     """
     with mutation_lock():
         _assert_expected_version(req.expected_version)
+        old_room = store.get_by_id("rooms", f"{req.building_name}__{req.room_number}")
+        old_dept = (old_room.get("designated_department") or "") if old_room else ""
         ok, err = core.set_room_department(req.building_name, req.room_number, req.department)
         if ok:
             bump_version()
@@ -980,8 +1008,9 @@ def set_room_department(
                 entity_type="room",
                 entity_id=f"{req.building_name}__{req.room_number}",
                 message="עודכנו זירות לחדר",
-                details={"department": req.department or ""},
+                details={"department": req.department or "", "previous_state": {"department": old_dept}},
             )
+            prune_audit_log(store)
     return SimpleOK(ok=ok, detail=err)
 
 
@@ -1008,6 +1037,8 @@ def auto_assign(
         raise HTTPException(status_code=403, detail="נדרשות הרשאות מתאימות")
 
     try:
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["rooms", "saved_assignments"])
         with mutation_lock():
             _assert_expected_version(req.expected_version)
             result = core.assign_all_unassigned(
@@ -1018,6 +1049,7 @@ def auto_assign(
             )
             if result["assigned_count"] > 0:
                 bump_version()
+        result["snapshot_event_id"] = snapshot_event_id
         append_audit_event(
             store,
             actor_role=session.role,
@@ -1028,6 +1060,7 @@ def auto_assign(
             message="שיבוץ אוטומטי הורץ",
             details=result,
         )
+        prune_audit_log(store)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=_he_error(e))
@@ -1087,12 +1120,15 @@ async def upload_personnel_file(
             df = pd.read_csv(io.BytesIO(contents))
         else:
             df = pd.read_excel(io.BytesIO(contents))
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["personnel", "rooms", "saved_assignments"])
         result = load_personnel_dataframe(df)
         if result["changed"] or result["room_state_changed"]:
             bump_version()
         upload_audit_details: dict = {
             "count": result["count"],
             "integrity_report": result["integrity_report"],
+            "snapshot_event_id": snapshot_event_id,
         }
         if result.get("removed_occupants"):
             upload_audit_details["removed_occupants"] = result["removed_occupants"]["items"]
@@ -1108,6 +1144,7 @@ async def upload_personnel_file(
             message="קובץ כוח אדם נטען",
             details=upload_audit_details,
         )
+        prune_audit_log(store)
         response: dict = {
             "ok": True,
             "count": result["count"],
@@ -1214,6 +1251,140 @@ def delete_audit_entry(event_id: str, session: AuthSession = Depends(require_adm
     return SimpleOK(ok=True)
 
 
+NON_REVERTIBLE_INFO_ONLY = {"personnel_sync_failed"}
+
+
+@router.post("/audit-log/{event_id}/revert", response_model=SimpleOK)
+def revert_audit_entry(event_id: str, session: AuthSession = Depends(require_admin)) -> SimpleOK:
+    """Revert an audited action and delete the audit entry."""
+    del session
+    existing = store.get_by_id("audit_log", event_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="רשומה לא נמצאה")
+
+    action = str(existing.get("action", ""))
+    entity_id = str(existing.get("entity_id", ""))
+    details_raw = existing.get("details", "{}")
+    details = json.loads(details_raw) if isinstance(details_raw, str) else (details_raw or {})
+    prev = details.get("previous_state")
+    snapshot_eid = details.get("snapshot_event_id")
+
+    if action in NON_REVERTIBLE_INFO_ONLY:
+        store.delete("audit_log", event_id)
+        return SimpleOK(ok=True)
+
+    with mutation_lock():
+        # --- Category B: snapshot-based revert ---
+        if snapshot_eid:
+            restored = restore_audit_snapshot(store, snapshot_eid)
+            if not restored:
+                raise HTTPException(status_code=400, detail="לא נמצא מידע לשחזור (snapshot חסר)")
+            delete_audit_snapshots(store, snapshot_eid)
+            store.delete("audit_log", event_id)
+            bump_version()
+            return SimpleOK(ok=True)
+
+        # --- Swap is self-inverse, no previous_state needed ---
+        if action == "swap":
+            pid_a = details.get("person_id_a", "")
+            pid_b = details.get("person_id_b", "")
+            if pid_a and pid_b:
+                ok, err = core.swap_people(pid_a, pid_b)
+                if not ok:
+                    raise HTTPException(status_code=400, detail=err or "שגיאה בביטול ההחלפה")
+                delete_audit_snapshots(store, event_id)
+                store.delete("audit_log", event_id)
+                bump_version()
+                return SimpleOK(ok=True)
+            raise HTTPException(status_code=400, detail="חסר מידע על האנשים שהוחלפו")
+
+        # --- Category A: previous_state-based revert ---
+        if prev is None:
+            raise HTTPException(status_code=400, detail="אין מידע לשחזור הפעולה")
+
+        err: str | None = None
+
+        if action == "unassign":
+            bname = prev.get("building_name")
+            rnum = prev.get("room_number")
+            if bname is not None and rnum is not None:
+                ok, err = core.assign_person_to_room(entity_id, bname, int(rnum))
+                if not ok:
+                    raise HTTPException(status_code=400, detail=err or "שגיאה בשחזור השיבוץ")
+            else:
+                raise HTTPException(status_code=400, detail="חסר מידע על החדר הקודם")
+
+        elif action == "assign_to_room":
+            ok = core.unassign(person_id=entity_id)
+            if not ok:
+                raise HTTPException(status_code=400, detail="האדם אינו משובץ כרגע")
+
+        elif action == "move":
+            bname = prev.get("building_name")
+            rnum = prev.get("room_number")
+            if bname is not None and rnum is not None:
+                ok, err = core.move_person(entity_id, bname, int(rnum))
+                if not ok:
+                    raise HTTPException(status_code=400, detail=err or "שגיאה בהעברה חזרה")
+            else:
+                ok = core.unassign(person_id=entity_id)
+                if not ok:
+                    raise HTTPException(status_code=400, detail="האדם אינו משובץ כרגע")
+
+        # swap handled above (self-inverse)
+
+        elif action == "personnel_create":
+            pid = details.get("person_id") or entity_id
+            core.unassign(person_id=pid)
+            store.delete("saved_assignments", pid)
+            store.delete("personnel", pid)
+
+        elif action == "delete_person":
+            person_record = prev.get("person_record")
+            if person_record:
+                store.insert("personnel", person_record)
+                room_info = prev.get("room")
+                if room_info:
+                    core.assign_person_to_room(
+                        person_record.get("person_id", entity_id),
+                        room_info["building_name"],
+                        int(room_info["room_number"]),
+                    )
+            else:
+                raise HTTPException(status_code=400, detail="חסר מידע לשחזור האדם")
+
+        elif action == "delete_room":
+            room_record = prev.get("room_record")
+            if room_record:
+                store.insert("rooms", room_record)
+            else:
+                raise HTTPException(status_code=400, detail="חסר מידע לשחזור החדר")
+
+        elif action == "release_reservation":
+            sa = prev.get("saved_assignment")
+            if sa:
+                store.insert("saved_assignments", sa)
+            else:
+                raise HTTPException(status_code=400, detail="חסר מידע לשחזור השמירה")
+
+        elif action == "room_designation_set":
+            old_dept = prev.get("department", "")
+            # entity_id is "building__room_number" format
+            parts = entity_id.split("__")
+            if len(parts) == 2:
+                core.set_room_department(parts[0], int(parts[1]), old_dept)
+            else:
+                raise HTTPException(status_code=400, detail="חסר מידע על החדר")
+
+        else:
+            raise HTTPException(status_code=400, detail="לא ניתן לבטל פעולה מסוג זה")
+
+        delete_audit_snapshots(store, event_id)
+        store.delete("audit_log", event_id)
+        bump_version()
+    return SimpleOK(ok=True)
+
+
 @router.delete("/saved-assignment/{person_id}", response_model=SimpleOK)
 def release_saved_assignment(
     person_id: str,
@@ -1227,6 +1398,7 @@ def release_saved_assignment(
         person = store.get_by_id("personnel", person_id)
         if not person_visible_to_session(session, person):
             raise HTTPException(status_code=403, detail="אין הרשאה לשחרר שמירה עבור זירה אחרת")
+    sa_record = dict(existing)
     store.delete("saved_assignments", person_id)
     bump_version()
     append_audit_event(
@@ -1240,8 +1412,10 @@ def release_saved_assignment(
         details={
             "building_name": existing.get("building_name", ""),
             "room_number": existing.get("room_number", ""),
+            "previous_state": {"saved_assignment": sa_record},
         },
     )
+    prune_audit_log(store)
     return SimpleOK(ok=True)
 
 
@@ -1256,6 +1430,7 @@ def delete_room(
     existing = store.get_by_id("rooms", room_id)
     if not existing:
         raise HTTPException(status_code=404, detail="החדר לא נמצא")
+    room_record = dict(existing)
     # Remove saved assignments for occupants in this room
     occupant_ids = json.loads(existing.get("occupant_ids", "[]"))
     for pid in occupant_ids:
@@ -1270,8 +1445,9 @@ def delete_room(
         entity_type="room",
         entity_id=room_id,
         message=f"חדר {room_number} במבנה {building_name} נמחק",
-        details={"building_name": building_name, "room_number": room_number, "occupants_removed": len(occupant_ids)},
+        details={"building_name": building_name, "room_number": room_number, "occupants_removed": len(occupant_ids), "previous_state": {"room_record": room_record}},
     )
+    prune_audit_log(store)
     return SimpleOK(ok=True)
 
 
@@ -1284,6 +1460,9 @@ def delete_person(
     existing = store.get_by_id("personnel", person_id)
     if not existing:
         raise HTTPException(status_code=404, detail="האדם לא נמצא")
+    person_record = dict(existing)
+    person_room_ref = core.get_person_room(person_id)
+    room_info = {"building_name": person_room_ref.building_name, "room_number": person_room_ref.room_number} if person_room_ref else None
     # Unassign from room if assigned
     core.unassign(person_id=person_id)
     # Remove saved assignment
@@ -1299,14 +1478,17 @@ def delete_person(
         entity_type="person",
         entity_id=person_id,
         message=f"אדם {existing.get('full_name', person_id)} נמחק מהמערכת",
-        details={"person_id": person_id, "full_name": existing.get("full_name", "")},
+        details={"person_id": person_id, "full_name": existing.get("full_name", ""), "previous_state": {"person_record": person_record, "room": room_info}},
     )
+    prune_audit_log(store)
     return SimpleOK(ok=True)
 
 
 @router.post("/reset-data", response_model=SimpleOK)
 def reset_data(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     """Wipe rooms, personnel, and saved assignments. Keeps settings, passwords, and audit log."""
+    snapshot_event_id = uuid.uuid4().hex
+    save_audit_snapshot(store, snapshot_event_id, ["rooms", "personnel", "saved_assignments"])
     store.delete_all("rooms")
     store.delete_all("personnel")
     store.delete_all("saved_assignments")
@@ -1319,7 +1501,9 @@ def reset_data(session: AuthSession = Depends(require_admin)) -> SimpleOK:
         entity_type="system",
         entity_id="data",
         message="חדרים וכוח אדם אופסו (הגדרות נשמרו)",
+        details={"snapshot_event_id": snapshot_event_id},
     )
+    prune_audit_log(store)
     logger.info("Data (rooms, personnel, saved assignments) reset by %s", session.role)
     return SimpleOK(ok=True)
 
@@ -1327,6 +1511,8 @@ def reset_data(session: AuthSession = Depends(require_admin)) -> SimpleOK:
 @router.post("/reset-all", response_model=SimpleOK)
 def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
     """Wipe all rooms, personnel, saved assignments, and audit log."""
+    snapshot_event_id = uuid.uuid4().hex
+    save_audit_snapshot(store, snapshot_event_id, ["rooms", "personnel", "saved_assignments"])
     store.delete_all("rooms")
     store.delete_all("personnel")
     store.delete_all("saved_assignments")
@@ -1340,6 +1526,8 @@ def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
         entity_type="system",
         entity_id="all",
         message="כל הנתונים אופסו (כולל יומן ביקורת)",
+        details={"snapshot_event_id": snapshot_event_id},
     )
+    prune_audit_log(store)
     logger.info("All data (rooms, personnel, saved assignments, audit log) reset by %s", session.role)
     return SimpleOK(ok=True)

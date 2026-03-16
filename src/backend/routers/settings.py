@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from src.backend.auth_session import AuthSession, require_admin
 from src.backend.dependencies import bump_version, core, reload_runtime_settings, store
-from src.backend.runtime_meta import append_audit_event, get_sync_status
+import uuid
+
+from src.backend.runtime_meta import append_audit_event, get_sync_status, prune_audit_log, save_audit_snapshot
 from src.backend.settings import (
     DEFAULTS,
     default_department_password,
@@ -309,6 +311,8 @@ def update_settings(
     personnel_backup = store.get_all("personnel")
 
     try:
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["settings", "rooms", "personnel", "saved_assignments"])
         save_settings(settings)
         reload_runtime_settings()
         # Clean up saved_assignments when policy changes away from "reserve"
@@ -333,8 +337,10 @@ def update_settings(
                 "sync_interval_seconds": settings.get("personnel_sync_interval_seconds"),
                 "sync_paused": settings.get("personnel_sync_paused"),
                 "auto_assign_policy": settings.get("auto_assign_policy"),
+                "snapshot_event_id": snapshot_event_id,
             },
         )
+        prune_audit_log(store)
         return {
             **settings,
             "integrity_report": integrity_report,
@@ -387,6 +393,8 @@ def import_setup_package(
     settings_backup = load_settings()
 
     try:
+        snapshot_event_id = uuid.uuid4().hex
+        save_audit_snapshot(store, snapshot_event_id, ["settings", "rooms", "personnel", "saved_assignments"])
         next_settings = _sanitize_settings(settings_payload, replace=True)
         save_settings(next_settings)
         reload_runtime_settings()
@@ -403,8 +411,10 @@ def import_setup_package(
             message="הגדרות יובאו",
             details={
                 "integrity_report": integrity_report,
+                "snapshot_event_id": snapshot_event_id,
             },
         )
+        prune_audit_log(store)
         return {
             "ok": True,
             "settings": next_settings,

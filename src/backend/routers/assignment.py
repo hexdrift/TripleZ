@@ -88,10 +88,12 @@ def unassign(
             person = store.get_by_id("personnel", str(req.person_id))
             if not person_visible_to_session(session, person):
                 raise HTTPException(status_code=403, detail="אין הרשאה להסיר אדם מזירה אחרת")
+        prev_room = core.get_person_room(str(req.person_id))
         ok = core.unassign(person_id=req.person_id)
         if ok:
             bump_version()
             store.delete("saved_assignments", req.person_id)
+            prev_state = {"building_name": prev_room.building_name, "room_number": prev_room.room_number} if prev_room else None
             append_audit_event(
                 store,
                 actor_role=session.role,
@@ -100,6 +102,7 @@ def unassign(
                 entity_type="person",
                 entity_id=req.person_id,
                 message="אדם הוסר מהחדר",
+                details={"previous_state": prev_state},
             )
     return SimpleOK(ok=ok, detail=None if ok else "המספר האישי אינו משובץ כרגע לחדר")
 
@@ -164,9 +167,11 @@ def move(
             if target_room is None or not room_visible_to_department(target_room, session.department or ""):
                 raise HTTPException(status_code=403, detail="אין הרשאה להעביר לחדר יעד זה")
 
+        prev_room = core.get_person_room(str(req.person_id))
         ok, err = core.move_person(req.person_id, req.target_building, req.target_room_number)
         if ok:
             bump_version()
+            prev_state = {"building_name": prev_room.building_name, "room_number": prev_room.room_number} if prev_room else None
             append_audit_event(
                 store,
                 actor_role=session.role,
@@ -178,6 +183,7 @@ def move(
                 details={
                     "target_building": req.target_building,
                     "target_room_number": req.target_room_number,
+                    "previous_state": prev_state,
                 },
             )
     return SimpleOK(ok=ok, detail=err)
@@ -222,6 +228,7 @@ def assign_to_room(
                 details={
                     "building_name": req.building_name,
                     "room_number": req.room_number,
+                    "previous_state": {"was_unassigned": True},
                 },
             )
     return SimpleOK(ok=ok, detail=err)

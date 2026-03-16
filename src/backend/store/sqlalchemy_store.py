@@ -72,6 +72,15 @@ def _build_tables(metadata: MetaData) -> dict[str, Table]:
         Column("details", Text, nullable=False, server_default="{}"),
     )
 
+    audit_snapshots = Table(
+        "audit_snapshots",
+        metadata,
+        Column("snapshot_id", String, primary_key=True),
+        Column("event_id", String, nullable=False),
+        Column("table_name", String, nullable=False),
+        Column("data", Text, nullable=False, server_default="[]"),
+    )
+
     saved_assignments = Table(
         "saved_assignments",
         metadata,
@@ -90,6 +99,7 @@ def _build_tables(metadata: MetaData) -> dict[str, Table]:
         "personnel": personnel,
         "app_meta": app_meta,
         "audit_log": audit_log,
+        "audit_snapshots": audit_snapshots,
         "saved_assignments": saved_assignments,
     }
 
@@ -117,6 +127,7 @@ class SQLAlchemyStore(RemoteStore):
             "personnel": "person_id",
             "app_meta": "key",
             "audit_log": "event_id",
+            "audit_snapshots": "snapshot_id",
             "saved_assignments": "person_id",
         }
 

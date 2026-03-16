@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AuditLogEntry, getAuditLog, clearAuditLog, deleteAuditEntry } from "@/lib/api";
+import { AuditLogEntry, getAuditLog, clearAuditLog, deleteAuditEntry, revertAuditEntry } from "@/lib/api";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,9 @@ const ACTION_LABELS: Record<string, string> = {
   auto_assign: "שיבוץ אוטומטי",
   settings_update: "עדכון הגדרות",
   reset_all: "איפוס מערכת",
+  reset_data: "איפוס נתונים",
+  delete_person: "מחיקת איש",
+  delete_room: "מחיקת חדר",
   unassign: "הסרה מחדר",
   swap: "החלפת חדרים",
   move: "העברה בין חדרים",
@@ -227,6 +230,8 @@ export default function AuditPage() {
   const [spinning, setSpinning] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+  const [revertTarget, setRevertTarget] = useState<AuditLogEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AuditLogEntry | null>(null);
   const isAdmin = auth.role === "admin";
 
   async function load() {
@@ -260,6 +265,37 @@ export default function AuditPage() {
       toast.success("הרשומה נמחקה");
     } catch {
       toast.error("שגיאה במחיקת הרשומה");
+    }
+  }
+
+  async function handleRevert(eventId: string) {
+    try {
+      const res = await revertAuditEntry(eventId);
+      if (res.ok) {
+        setEntries((prev) => prev.filter((e) => e.event_id !== eventId));
+        toast.success("הפעולה בוטלה בהצלחה");
+      } else {
+        toast.error(res.detail || "שגיאה בביטול הפעולה");
+      }
+    } catch {
+      toast.error("שגיאה בביטול הפעולה");
+    }
+  }
+
+  function isRevertible(entry: AuditLogEntry): boolean {
+    const details = entry.details || {};
+    return details.previous_state != null || details.snapshot_event_id != null;
+  }
+
+  function isSnapshotRevert(entry: AuditLogEntry): boolean {
+    return !!(entry.details || {}).snapshot_event_id;
+  }
+
+  function handleTrashClick(entry: AuditLogEntry) {
+    if (isRevertible(entry)) {
+      setRevertTarget(entry);
+    } else {
+      setDeleteTarget(entry);
     }
   }
 
@@ -368,7 +404,7 @@ export default function AuditPage() {
                   return next;
                 })}
                 isAdmin={isAdmin}
-                onDelete={handleDeleteEntry}
+                onTrashClick={() => handleTrashClick(entry)}
               />
             ))
           )}
@@ -384,6 +420,36 @@ export default function AuditPage() {
         onConfirm={() => {
           setConfirmClearOpen(false);
           handleClearAll();
+        }}
+      />
+      {/* Revert confirmation dialog */}
+      <ConfirmationDialog
+        open={revertTarget !== null}
+        title="לבטל פעולה זו?"
+        description={
+          revertTarget && isSnapshotRevert(revertTarget)
+            ? `הפעולה "${actionLabel(revertTarget.action)}" תבוטל. המערכת תחזור למצב שהיה לפני הפעולה. שינויים שבוצעו לאחר מכן עלולים להיפגע.`
+            : `הפעולה "${actionLabel(revertTarget?.action ?? "")}" תבוטל והרשומה תימחק מהיומן.`
+        }
+        confirmLabel="בטל פעולה"
+        confirmIcon={<IconTrash size={14} />}
+        onOpenChange={(open) => { if (!open) setRevertTarget(null); }}
+        onConfirm={() => {
+          if (revertTarget) handleRevert(revertTarget.event_id);
+          setRevertTarget(null);
+        }}
+      />
+      {/* Delete-only confirmation dialog (old entries without revert data) */}
+      <ConfirmationDialog
+        open={deleteTarget !== null}
+        title="למחוק רשומה?"
+        description="הרשומה תימחק מהיומן. הפעולה עצמה לא תבוטל (אין מידע לשחזור)."
+        confirmLabel="מחק"
+        confirmIcon={<IconTrash size={14} />}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        onConfirm={() => {
+          if (deleteTarget) handleDeleteEntry(deleteTarget.event_id);
+          setDeleteTarget(null);
         }}
       />
     </div>
@@ -405,7 +471,7 @@ interface ReassignedEntry {
   room_number: number;
 }
 
-function AuditRow({ entry, expanded, onToggle, isAdmin, onDelete }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void; isAdmin: boolean; onDelete: (eventId: string) => void }) {
+function AuditRow({ entry, expanded, onToggle, isAdmin, onTrashClick }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void; isAdmin: boolean; onTrashClick: () => void }) {
   const [copied, setCopied] = useState(false);
   const details = entry.details || {};
   const removedOccupants = (details.removed_occupants ?? []) as RemovedOccupant[];
@@ -508,9 +574,9 @@ function AuditRow({ entry, expanded, onToggle, isAdmin, onDelete }: { entry: Aud
             {isAdmin && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onDelete(entry.event_id); }}
+                onClick={(e) => { e.stopPropagation(); onTrashClick(); }}
                 className="rounded-md p-1 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
-                title="מחק רשומה"
+                title="בטל פעולה"
               >
                 <IconTrash size={13} />
               </button>

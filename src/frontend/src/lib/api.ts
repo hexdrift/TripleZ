@@ -516,6 +516,10 @@ export async function deleteAuditEntry(eventId: string): Promise<{ ok: boolean }
   return fetchJSON(`/admin/audit-log/${encodeURIComponent(eventId)}`, { method: "DELETE" });
 }
 
+export async function revertAuditEntry(eventId: string): Promise<{ ok: boolean; detail?: string }> {
+  return fetchJSON(`/admin/audit-log/${encodeURIComponent(eventId)}/revert`, { method: "POST" });
+}
+
 export function departmentSummaries(rooms: Room[]): DepartmentSummary[] {
   const map = new Map<string, Room[]>();
   for (const r of rooms) {
