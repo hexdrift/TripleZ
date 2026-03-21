@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.backend.auth_session import AuthSession, require_admin
 from src.backend.dependencies import bump_version, core, reload_runtime_settings, store
@@ -355,18 +355,30 @@ def update_settings(
 
 
 @router.get("/admin/setup-package")
-def export_setup_package(session: AuthSession = Depends(require_admin)) -> Dict[str, Any]:
-    """Export settings only (ranks, departments, buildings, genders, passwords, policies).
+def export_setup_package(
+    include: str = Query("settings"),
+    session: AuthSession = Depends(require_admin),
+) -> Dict[str, Any]:
+    """Export a setup package with settings and optionally rooms/personnel.
+
+    Args:
+        include: What to include — ``"settings"``, ``"settings+rooms"``,
+            or ``"settings+rooms+personnel"``.
 
     Returns:
-        Versioned dict containing settings snapshot.
+        Versioned dict containing the requested data.
     """
     del session
-    return {
+    result: Dict[str, Any] = {
         "version": 1,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "settings": load_settings(),
     }
+    if "rooms" in include:
+        result["rooms"] = _serialize_rooms_for_export()
+    if "personnel" in include:
+        result["personnel"] = _serialize_personnel_for_export()
+    return result
 
 
 @router.post("/admin/setup-package")

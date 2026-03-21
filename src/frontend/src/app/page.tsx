@@ -8,7 +8,7 @@ import { DepartmentCard } from "@/components/department-card";
 import { GroupCard } from "@/components/group-card";
 import { StatCard } from "@/components/stat-card";
 import { buildingSummaries, departmentSummaries, genderSummaries, rankSummaries } from "@/lib/api";
-import { exportToExcel } from "@/lib/export";
+import { exportToExcel, exportFlatRooms } from "@/lib/export";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import { ViewMode } from "@/lib/types";
 import { isRoomVisibleToManagerWithMap, deptBedCounts, adminDeptSummaries } from "@/lib/room-utils";
@@ -40,6 +40,11 @@ const SwapModal = dynamic(
   { ssr: false },
 );
 
+const ExportFormatModal = dynamic(
+  () => import("@/components/export-format-modal").then((module) => module.ExportFormatModal),
+  { ssr: false },
+);
+
 export default function Home() {
   return <DashboardContent />;
 }
@@ -65,6 +70,7 @@ function DashboardContent() {
   const [swapOpen, setSwapOpen] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
   const [autoAssignOpen, setAutoAssignOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
 
   const personnelMap = useMemo(
     () => new Map(personnel.map((person) => [person.person_id, person])),
@@ -331,22 +337,7 @@ function DashboardContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => exportToExcel(
-                  isManager ? `שיבוצים_${departmentLabel}` : "שיבוצים_כלל_הזירות",
-                  ["שם מבנה", "מספר חדר", "זירות", "מגדר"],
-                  scopedRooms.map((r) => {
-                    const deptLabel = isManager && r.departments.length === 1 && r.departments[0] === managerDept
-                      ? "—"
-                      : r.departments.map(deptHe).join(", ") || "—";
-                    return [
-                      buildingHe(r.building_name),
-                      String(r.room_number),
-                      deptLabel,
-                      genderHe(r.gender),
-                      r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
-                    ];
-                  }),
-                )}
+                onClick={() => setExportModalOpen(true)}
                 className="inline-flex items-center gap-1.5 text-xs"
               >
                 <IconDownload size={14} />
@@ -397,7 +388,7 @@ function DashboardContent() {
         </div>
 
         {currentCount === 0 ? (
-          <EmptyState isManager={isManager} departmentLabel={departmentLabel} onAddRooms={() => setAddRoomOpen(true)} onAddPersonnel={() => setAddPersonnelOpen(true)} />
+          <EmptyState isManager={isManager} departmentLabel={departmentLabel} onAddRooms={() => setAddRoomOpen(true)} onAddPersonnel={() => setAddPersonnelOpen(true)} hasRooms={scopedRooms.length > 0} hasPersonnel={scopedPersonnel.length > 0} />
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {viewMode === "buildings"
@@ -461,6 +452,45 @@ function DashboardContent() {
       {addRoomOpen ? <AddRoomModal open={addRoomOpen} onClose={() => setAddRoomOpen(false)} /> : null}
       {addPersonnelOpen ? <AddPersonnelModal open={addPersonnelOpen} onClose={() => setAddPersonnelOpen(false)} /> : null}
       {swapOpen ? <SwapModal open={swapOpen} onClose={() => setSwapOpen(false)} /> : null}
+      <ExportFormatModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        onExportVisual={() => {
+          const exportName = isManager ? `שיבוצים_${departmentLabel}` : "שיבוצים_כלל_הזירות";
+          void exportToExcel(
+            exportName,
+            ["שם מבנה", "מספר חדר", "זירות", "מגדר"],
+            scopedRooms.map((r) => {
+              const deptLabel = isManager && r.departments.length === 1 && r.departments[0] === managerDept
+                ? "—"
+                : r.departments.map(deptHe).join(", ") || "—";
+              return [
+                buildingHe(r.building_name),
+                String(r.room_number),
+                deptLabel,
+                genderHe(r.gender),
+                r.number_of_beds,
+                r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
+              ];
+            }),
+          );
+        }}
+        onExportFlat={() => {
+          const exportName = isManager ? `שיבוצים_${departmentLabel}` : "שיבוצים_כלל_הזירות";
+          void exportFlatRooms(
+            exportName,
+            scopedRooms.map((r) => ({
+              building_name: buildingHe(r.building_name),
+              room_number: String(r.room_number),
+              number_of_beds: r.number_of_beds,
+              room_rank: rankHe(r.room_rank),
+              gender: genderHe(r.gender),
+              departments: r.designated_department ? deptHe(r.designated_department) : "",
+              occupant_ids: r.occupant_ids.join(","),
+            })),
+          );
+        }}
+      />
       <AutoAssignModal
         open={autoAssignOpen}
         onOpenChange={setAutoAssignOpen}
@@ -610,34 +640,48 @@ function AnalyticsLoadingBlock() {
   );
 }
 
-function EmptyState({ isManager, departmentLabel, onAddRooms, onAddPersonnel }: { isManager: boolean; departmentLabel: string; onAddRooms: () => void; onAddPersonnel: () => void }) {
+function EmptyState({ isManager, departmentLabel, onAddRooms, onAddPersonnel, hasRooms, hasPersonnel }: { isManager: boolean; departmentLabel: string; onAddRooms: () => void; onAddPersonnel: () => void; hasRooms: boolean; hasPersonnel: boolean }) {
+  const icon = hasPersonnel ? <IconDoor size={32} /> : hasRooms ? <IconUsers size={32} /> : <IconDoor size={32} />;
+  const title = isManager
+    ? `אין כרגע חדרים בזירת ${departmentLabel}`
+    : hasPersonnel && !hasRooms
+      ? "טען חדרים כדי להתחיל בשיבוץ"
+      : hasRooms && !hasPersonnel
+        ? "טען כוח אדם כדי להתחיל בשיבוץ"
+        : "לא נטענו נתונים";
+  const subtitle = isManager
+    ? "כאשר יוגדרו חדרים לזירה שלך הם יופיעו כאן."
+    : hasPersonnel && !hasRooms
+      ? "כוח אדם נטען בהצלחה. כעת יש להוסיף חדרים."
+      : hasRooms && !hasPersonnel
+        ? "חדרים נטענו בהצלחה. כעת יש להוסיף כוח אדם."
+        : "טען חדרים ואנשי כוח אדם כדי להתחיל";
+
   return (
     <Card className="text-center overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
       <CardContent className="p-12">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-[22px] border border-border/60 bg-background/75 text-muted-foreground shadow-[var(--shadow-inset)]">
-          <IconDoor size={32} />
+          {icon}
         </div>
-        <p className="text-base font-semibold mb-1 text-foreground">
-          {isManager ? `אין כרגע חדרים בזירת ${departmentLabel}` : "לא נטענו נתונים"}
-        </p>
+        <p className="text-base font-semibold mb-1 text-foreground">{title}</p>
         {isManager ? (
-          <p className="text-sm text-muted-foreground">
-            כאשר יוגדרו חדרים לזירה שלך הם יופיעו כאן.
-          </p>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground mb-5">
-              טען חדרים ואנשי כוח אדם כדי להתחיל
-            </p>
+            <p className="text-sm text-muted-foreground mb-5">{subtitle}</p>
             <div className="flex items-center justify-center gap-3">
-              <Button onClick={onAddRooms} className="inline-flex items-center gap-2">
-                <IconDoor size={15} />
-                טעינת חדרים
-              </Button>
-              <Button variant="outline" onClick={onAddPersonnel} className="inline-flex items-center gap-2">
-                <IconUsers size={15} />
-                טעינת כוח אדם
-              </Button>
+              {!hasRooms && (
+                <Button onClick={onAddRooms} className="inline-flex items-center gap-2">
+                  <IconDoor size={15} />
+                  טעינת חדרים
+                </Button>
+              )}
+              {!hasPersonnel && (
+                <Button variant={hasRooms ? "default" : "outline"} onClick={onAddPersonnel} className="inline-flex items-center gap-2">
+                  <IconUsers size={15} />
+                  טעינת כוח אדם
+                </Button>
+              )}
             </div>
           </>
         )}

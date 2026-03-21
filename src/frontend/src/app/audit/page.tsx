@@ -357,7 +357,7 @@ export default function AuditPage() {
           >
             <IconRefresh size={15} className={cn("transition-transform duration-500", spinning && "animate-spin")} />
           </Button>
-          {isAdmin && entries.length > 0 && (
+          {false && isAdmin && entries.length > 0 && (
             <Button
               variant="ghost"
               size="icon"
@@ -392,7 +392,7 @@ export default function AuditPage() {
               {search ? "לא נמצאו תוצאות" : "אין רשומות ביומן"}
             </div>
           ) : (
-            filtered.map((entry) => (
+            filtered.map((entry, idx) => (
               <AuditRow
                 key={entry.event_id}
                 entry={entry}
@@ -404,7 +404,7 @@ export default function AuditPage() {
                   return next;
                 })}
                 isAdmin={isAdmin}
-                onTrashClick={() => handleTrashClick(entry)}
+                onTrashClick={idx === 0 ? () => handleTrashClick(entry) : undefined}
               />
             ))
           )}
@@ -471,7 +471,7 @@ interface ReassignedEntry {
   room_number: number;
 }
 
-function AuditRow({ entry, expanded, onToggle, isAdmin, onTrashClick }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void; isAdmin: boolean; onTrashClick: () => void }) {
+function AuditRow({ entry, expanded, onToggle, isAdmin, onTrashClick }: { entry: AuditLogEntry; expanded: boolean; onToggle: () => void; isAdmin: boolean; onTrashClick?: () => void }) {
   const [copied, setCopied] = useState(false);
   const details = entry.details || {};
   const removedOccupants = (details.removed_occupants ?? []) as RemovedOccupant[];
@@ -571,7 +571,7 @@ function AuditRow({ entry, expanded, onToggle, isAdmin, onTrashClick }: { entry:
             >
               {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
             </button>
-            {isAdmin && (
+            {isAdmin && onTrashClick && (
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onTrashClick(); }}

@@ -1234,19 +1234,22 @@ def get_audit_log(
 
 @router.delete("/audit-log", response_model=SimpleOK)
 def clear_audit_log(session: AuthSession = Depends(require_admin)) -> SimpleOK:
-    """Delete all audit log entries."""
+    """Delete all audit log entries and their associated snapshots."""
     del session
+    for entry in store.get_all("audit_log"):
+        delete_audit_snapshots(store, str(entry.get("event_id", "")))
     store.delete_all("audit_log")
     return SimpleOK(ok=True)
 
 
 @router.delete("/audit-log/{event_id}", response_model=SimpleOK)
 def delete_audit_entry(event_id: str, session: AuthSession = Depends(require_admin)) -> SimpleOK:
-    """Delete a single audit log entry."""
+    """Delete a single audit log entry and its associated snapshots."""
     del session
     existing = store.get_by_id("audit_log", event_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="רשומה לא נמצאה")
+    delete_audit_snapshots(store, event_id)
     store.delete("audit_log", event_id)
     return SimpleOK(ok=True)
 
@@ -1510,24 +1513,12 @@ def reset_data(session: AuthSession = Depends(require_admin)) -> SimpleOK:
 
 @router.post("/reset-all", response_model=SimpleOK)
 def reset_all(session: AuthSession = Depends(require_admin)) -> SimpleOK:
-    """Wipe all rooms, personnel, saved assignments, and audit log."""
-    snapshot_event_id = uuid.uuid4().hex
-    save_audit_snapshot(store, snapshot_event_id, ["rooms", "personnel", "saved_assignments"])
+    """Wipe all rooms, personnel, saved assignments, audit log, and snapshots."""
     store.delete_all("rooms")
     store.delete_all("personnel")
     store.delete_all("saved_assignments")
     store.delete_all("audit_log")
+    store.delete_all("audit_snapshots")
     bump_version()
-    append_audit_event(
-        store,
-        actor_role=session.role,
-        actor_department=_actor_department(session),
-        action="reset_all",
-        entity_type="system",
-        entity_id="all",
-        message="כל הנתונים אופסו (כולל יומן ביקורת)",
-        details={"snapshot_event_id": snapshot_event_id},
-    )
-    prune_audit_log(store)
     logger.info("All data (rooms, personnel, saved assignments, audit log) reset by %s", session.role)
     return SimpleOK(ok=True)

@@ -27,6 +27,7 @@ type RoomEntry = {
   gender: string;
   roomLabel: string;
   occupants: string[];
+  capacity: number;
 };
 
 const solidFill = (argb: string) =>
@@ -69,103 +70,80 @@ async function exportColumnar(filename: string, rooms: RoomEntry[]) {
     return order.map((b) => ({ building: b, rooms: map.get(b)! }));
   }
 
+  // Each building block gets the next color in sequence so that
+  // no two adjacent blocks share the same color scheme.
+  let nextColorIdx = 0;
+
   let currentRow = 1;
 
   for (const gender of genderOrder) {
     const genderRooms = byGender.get(gender)!;
     const buildingGroups = groupByBuilding(genderRooms);
-    const totalCols = genderRooms.length;
-
-    // Find max occupants in this gender section
-    let maxOcc = 0;
-    for (const r of genderRooms) {
-      if (r.occupants.length > maxOcc) maxOcc = r.occupants.length;
-    }
-
-    // ── Row: Gender title (merged across all columns) ──
-    const genderTitleRow = currentRow;
-    if (totalCols > 1) {
-      ws.mergeCells(genderTitleRow, 1, genderTitleRow, totalCols);
-    }
-    const genderCell = ws.getCell(genderTitleRow, 1);
-    genderCell.value = gender;
-    const genderColor = GENDER_COLORS[gender] || "FF333333";
-    genderCell.fill = solidFill(genderColor);
-    genderCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 14 };
-    genderCell.alignment = { horizontal: "center", vertical: "middle" };
-    genderCell.border = cellBorder;
-    for (let c = 2; c <= totalCols; c++) {
-      const mc = ws.getCell(genderTitleRow, c);
-      mc.fill = solidFill(genderColor);
-      mc.border = cellBorder;
-    }
-    ws.getRow(genderTitleRow).height = 30;
-
-    // ── Row: Building headers (merged per building group) ──
-    const buildingRow = currentRow + 1;
-    let col = 1;
-    let colorIdx = 0;
-
-    // Track building info for room + data rows
-    const roomLayout: { room: RoomEntry; col: number; colors: typeof BUILDING_COLORS[0] }[] = [];
 
     for (const group of buildingGroups) {
-      const colors = BUILDING_COLORS[colorIdx % BUILDING_COLORS.length];
-      const startCol = col;
-      const endCol = col + group.rooms.length - 1;
+      const colors = BUILDING_COLORS[nextColorIdx % BUILDING_COLORS.length];
+      nextColorIdx++;
+      const totalCols = group.rooms.length;
 
-      // Building header merged
-      if (group.rooms.length > 1) {
-        ws.mergeCells(buildingRow, startCol, buildingRow, endCol);
+      // Find max capacity (beds) in this building block
+      let maxOcc = 0;
+      for (const r of group.rooms) {
+        const rows = Math.max(r.capacity, r.occupants.length);
+        if (rows > maxOcc) maxOcc = rows;
       }
-      const bCell = ws.getCell(buildingRow, startCol);
-      bCell.value = group.building;
-      bCell.fill = solidFill(colors.header);
-      bCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
-      bCell.alignment = { horizontal: "center", vertical: "middle" };
-      bCell.border = cellBorder;
-      for (let c = startCol + 1; c <= endCol; c++) {
-        const mc = ws.getCell(buildingRow, c);
-        mc.fill = solidFill(colors.header);
+
+      // ── Row: Gender + Building title (merged across all columns) ──
+      const titleRow = currentRow;
+      const genderColor = GENDER_COLORS[gender] || "FF333333";
+      if (totalCols > 1) {
+        ws.mergeCells(titleRow, 1, titleRow, totalCols);
+      }
+      const genderCell = ws.getCell(titleRow, 1);
+      genderCell.value = `${gender} · ${group.building}`;
+      genderCell.fill = solidFill(genderColor);
+      genderCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 14 };
+      genderCell.alignment = { horizontal: "center", vertical: "middle" };
+      genderCell.border = cellBorder;
+      for (let c = 2; c <= totalCols; c++) {
+        const mc = ws.getCell(titleRow, c);
+        mc.fill = solidFill(genderColor);
         mc.border = cellBorder;
       }
+      ws.getRow(titleRow).height = 30;
 
-      for (const room of group.rooms) {
-        roomLayout.push({ room, col, colors });
-        col++;
+      // ── Row: Room headers ──
+      const roomHeaderRow = currentRow + 1;
+      for (let ri = 0; ri < group.rooms.length; ri++) {
+        const rCell = ws.getCell(roomHeaderRow, ri + 1);
+        rCell.value = group.rooms[ri].roomLabel;
+        rCell.fill = solidFill(colors.sub);
+        rCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+        rCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+        rCell.border = cellBorder;
       }
-      colorIdx++;
-    }
-    ws.getRow(buildingRow).height = 26;
+      ws.getRow(roomHeaderRow).height = 22;
 
-    // ── Row: Room headers ──
-    const roomHeaderRow = currentRow + 2;
-    for (const { room, col: c, colors } of roomLayout) {
-      const rCell = ws.getCell(roomHeaderRow, c);
-      rCell.value = room.roomLabel;
-      rCell.fill = solidFill(colors.sub);
-      rCell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-      rCell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-      rCell.border = cellBorder;
-    }
-    ws.getRow(roomHeaderRow).height = 22;
-
-    // ── Rows: Occupant names ──
-    const dataStart = currentRow + 3;
-    for (const { room, col: c, colors } of roomLayout) {
-      for (let oi = 0; oi < maxOcc; oi++) {
-        const cell = ws.getCell(dataStart + oi, c);
-        const name = room.occupants[oi] || "";
-        cell.value = sanitizeExcelCell(name);
-        cell.fill = solidFill(colors.light);
-        cell.font = { size: 11, color: { argb: colors.header } };
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.border = cellBorder;
+      // ── Rows: Occupant names ──
+      const dataStart = currentRow + 2;
+      for (let ri = 0; ri < group.rooms.length; ri++) {
+        const room = group.rooms[ri];
+        const c = ri + 1;
+        for (let oi = 0; oi < maxOcc; oi++) {
+          const cell = ws.getCell(dataStart + oi, c);
+          const name = room.occupants[oi];
+          if (name) {
+            cell.value = sanitizeExcelCell(name);
+          }
+          cell.fill = solidFill(colors.light);
+          cell.font = { size: 11, color: { argb: colors.header } };
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+          cell.border = cellBorder;
+        }
       }
-    }
 
-    // Move past this section + 2 empty rows before next gender
-    currentRow = dataStart + maxOcc + 2;
+      // Move past this block + 2 empty rows before next building
+      currentRow = dataStart + maxOcc + 2;
+    }
   }
 
   // Column widths
@@ -193,24 +171,26 @@ async function exportColumnar(filename: string, rooms: RoomEntry[]) {
 export async function exportToExcel(
   filename: string,
   headers: string[],
-  rows: (string | string[])[][],
+  rows: (string | number | string[])[][],
 ) {
   try {
     const hasOccupants = rows.length > 0 && Array.isArray(rows[0][rows[0].length - 1]);
 
     if (hasOccupants) {
-      // Parse rows: [building, roomNumber, ...info, gender(last fixed), [occupants]]
-      // Current call sites pass: [building, roomNumber, dept, gender, [occupants]]
+      // Parse rows: [building, roomNumber, ...info, gender(last fixed), capacity, [occupants]]
+      // Current call sites pass: [building, roomNumber, dept, gender, numberOfBeds, [occupants]]
       const columnarRows: RoomEntry[] = rows.map((row) => {
         const occupants = row[row.length - 1] as string[];
-        const fixed = row.slice(0, -1) as string[];
+        const capacityIdx = row.length - 2;
+        const capacity = typeof row[capacityIdx] === "number" ? (row[capacityIdx] as number) : occupants.length;
+        const fixed = row.slice(0, typeof row[capacityIdx] === "number" ? capacityIdx : -1) as string[];
         const building = fixed[0] || "";
         const roomNumber = fixed[1] || "";
         const gender = fixed[fixed.length - 1] || "";
         // Build room label from room number + middle info (dept etc, skip building and gender)
         const infoParts = fixed.slice(2, -1).filter((v) => v && v !== "—");
         const label = [`חדר ${roomNumber}`, ...infoParts].filter(Boolean).join(" · ");
-        return { building, gender, roomLabel: label, occupants };
+        return { building, gender, roomLabel: label, occupants, capacity };
       });
       await exportColumnar(filename, columnarRows);
       return;
@@ -258,6 +238,35 @@ export async function exportToExcel(
     console.error(err);
     toast.error("שגיאה בייצוא לאקסל");
   }
+}
+
+/**
+ * Export rooms as a flat data-table .xlsx that can be uploaded back.
+ * Columns match the standard room upload format.
+ */
+export async function exportFlatRooms(
+  filename: string,
+  rooms: {
+    building_name: string;
+    room_number: string;
+    number_of_beds: number;
+    room_rank: string;
+    gender: string;
+    departments: string;
+    occupant_ids: string;
+  }[],
+) {
+  const headers = ["שם מבנה", "מספר חדר", "מספר מיטות", "דרגת חדר", "מגדר", "זירות", "מזהי דיירים"];
+  const rows: string[][] = rooms.map((r) => [
+    r.building_name,
+    r.room_number,
+    String(r.number_of_beds),
+    r.room_rank,
+    r.gender,
+    r.departments,
+    r.occupant_ids,
+  ]);
+  await exportToExcel(filename, headers, rows);
 }
 
 /** Trigger a browser download from a Blob. */

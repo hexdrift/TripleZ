@@ -300,6 +300,8 @@ export interface SetupPackage {
   version: number;
   exported_at: string;
   settings: AppSettings;
+  rooms?: Record<string, unknown>[];
+  personnel?: Record<string, unknown>[];
 }
 
 export interface IntegrityReport {
@@ -349,8 +351,17 @@ export interface AutoAssignResult {
   message: string;
 }
 
-export async function getSetupPackage(): Promise<SetupPackage> {
-  return fetchJSON<SetupPackage>("/admin/setup-package");
+export async function getSetupPackage(include = "settings"): Promise<SetupPackage> {
+  return fetchJSON<SetupPackage>(`/admin/setup-package?include=${encodeURIComponent(include)}`);
+}
+
+export async function loadPersonnel(
+  personnel: Record<string, unknown>[],
+): Promise<{ ok: boolean; count: number; integrity_report?: IntegrityReport }> {
+  return fetchJSON("/admin/load_personnel", {
+    method: "POST",
+    body: JSON.stringify({ personnel }),
+  });
 }
 
 export async function importSetupPackage(setupPackage: SetupPackage): Promise<{

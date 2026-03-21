@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEventHandler } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEventHandler } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAppData } from "@/components/app-shell";
 import { toast } from "react-toastify";
@@ -11,6 +11,8 @@ import {
   getSetupPackage,
   IntegrityReport,
   importSetupPackage,
+  loadPersonnel,
+  loadRooms,
   resetAll,
   resetData,
   SetupPackage,
@@ -40,6 +42,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmationDialog } from "@/components/confirmation-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const fadeUp = {
@@ -71,13 +74,18 @@ function SettingsContent() {
   const [showImpactConfirm, setShowImpactConfirm] = useState(false);
   const pendingImpactRef = useRef<{ personnel: Record<string, unknown>[]; rooms: Record<string, unknown>[] } | null>(null);
   const settingsImportRef = useRef<HTMLInputElement>(null);
+  const [exportType, setExportType] = useState("settings");
+  const hasLoadedRef = useRef(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (auth.role !== "admin") return;
     getSettings()
-      .then((nextSettings) =>
-        setSettings(alignDepartmentPasswords(nextSettings)),
-      )
+      .then((nextSettings) => {
+        setSettings(alignDepartmentPasswords(nextSettings));
+        // Mark loaded after a tick so the first setState doesn't trigger auto-save
+        setTimeout(() => { hasLoadedRef.current = true; }, 100);
+      })
       .catch((e: Error) => setError(e.message));
   }, [auth.role]);
 
@@ -86,6 +94,17 @@ function SettingsContent() {
     setError(null);
     setSettings(alignDepartmentPasswords(next));
   }
+
+  // Debounced auto-save: triggers 800ms after the last settings change
+  useEffect(() => {
+    if (!settings || !hasLoadedRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      void handleSave();
+    }, 800);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   if (auth.role !== "admin") {
     return (
@@ -157,7 +176,6 @@ function SettingsContent() {
       await refreshPersonnel(true);
       showIntegrityReport(updated.integrity_report);
       setSaved(true);
-      toast.success("ההגדרות נשמרו");
       window.setTimeout(() => setSaved(false), 2000);
       if (impact) downloadImpactExcel(impact);
     } catch (e) {
@@ -181,9 +199,22 @@ function SettingsContent() {
       if (isSetupPackage(parsed)) {
         const result = await importSetupPackage(parsed);
         updateLocalSettings(result.settings);
+
+        const parts: string[] = ["הגדרות"];
+        const pkg = parsed as SetupPackage;
+
+        if (Array.isArray(pkg.rooms) && pkg.rooms.length > 0) {
+          await loadRooms(pkg.rooms);
+          parts.push(`${pkg.rooms.length} חדרים`);
+        }
+        if (Array.isArray(pkg.personnel) && pkg.personnel.length > 0) {
+          await loadPersonnel(pkg.personnel);
+          parts.push(`${pkg.personnel.length} אנשי כוח אדם`);
+        }
+
         await refreshPersonnel(true);
         showIntegrityReport(result.integrity_report);
-        toast.success("ההגדרות יובאו בהצלחה");
+        toast.success(`יובאו בהצלחה: ${parts.join(", ")}`);
       } else {
         const updated = await updateSettings(parsed as Partial<AppSettings>);
         updateLocalSettings(updated);
@@ -206,11 +237,15 @@ function SettingsContent() {
   async function handleExportSetup() {
     setExportingSetup(true);
     try {
-      const setupPackage = await getSetupPackage();
+      const setupPackage = await getSetupPackage(exportType);
       const blob = new Blob([JSON.stringify(setupPackage, null, 2)], {
         type: "application/json",
       });
-      downloadBlob(blob, "triplez_הגדרות.json");
+      const filenames: Record<string, string> = {
+        "settings": "triplez_הגדרות.json",
+        "settings+rooms+personnel": "triplez_נתוני_מערכת.json",
+      };
+      downloadBlob(blob, filenames[exportType] || "triplez_הגדרות.json");
     } catch (e) {
       const message = e instanceof Error ? e.message : "שגיאה בייצוא הגדרות";
       setError(message);
@@ -244,29 +279,77 @@ function SettingsContent() {
       className="space-y-6"
     >
       <motion.div variants={fadeUp} transition={{ duration: 0.18 }}>
-        <Card className="page-hero overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
-          <CardContent className="pt-6">
+        <Card className="page-hero mb-0 overflow-hidden border-border/70 bg-gradient-to-br from-card via-card to-background/80">
+          <CardContent className="p-5 sm:p-7">
             <div
               className="flex items-center justify-between"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
             >
-              <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">
-                הגדרות מערכת
-              </h2>
+              <div className="flex items-center gap-3" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <h2 className="text-[22px] font-semibold tracking-[-0.04em] text-foreground">
+                  הגדרות מערכת
+                </h2>
+                <AnimatePresence>
+                  {saving && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                      style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}
+                    >
+                      <motion.div
+                        className="h-3 w-3 rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.7, repeat: Infinity, ease: "linear" }}
+                      />
+                      שומר...
+                    </motion.div>
+                  )}
+                  {saved && !saving && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
+                      style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}
+                    >
+                      <IconCheck size={12} />
+                      נשמר
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               <div
                 className="flex items-center gap-2"
                 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
               >
+                <Select value={exportType} onValueChange={setExportType}>
+                  <SelectTrigger size="sm" className="h-8 text-xs" style={{ width: "155px" }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="settings">הגדרות בלבד</SelectItem>
+                    <SelectItem value="settings+rooms+personnel">כל נתוני המערכת</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportSetup}
+                  disabled={exportingSetup}
+                  className="inline-flex items-center gap-1.5"
+                >
+                  <IconDownload size={14} />
+                  {exportingSetup ? "מייצא..." : "ייצוא"}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   disabled={importing}
                   onClick={() => settingsImportRef.current?.click()}
+                  className="inline-flex items-center gap-1.5"
                 >
                   <IconUpload size={14} />
                   {importing ? "מייבא..." : "ייבוא"}
@@ -282,37 +365,6 @@ function SettingsContent() {
                     e.target.value = "";
                   }}
                 />
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportSetup}
-                  disabled={exportingSetup}
-                >
-                  <IconDownload size={14} />
-                  {exportingSetup ? "מייצא..." : "ייצוא"}
-                </Button>
-
-                <Button
-                  onClick={handleSave}
-                  disabled={saving || importing}
-                  size="sm"
-                >
-                  {saving ? (
-                    <motion.div
-                      className="h-3.5 w-3.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground"
-                      animate={{ rotate: 360 }}
-                      transition={{
-                        duration: 0.7,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
-                    />
-                  ) : (
-                    <IconCheck size={14} />
-                  )}
-                  {saving ? "שומר..." : saved ? "נשמר!" : "שמירה"}
-                </Button>
               </div>
             </div>
           </CardContent>

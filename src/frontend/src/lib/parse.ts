@@ -155,7 +155,10 @@ export function parseOccupantIds(value: string): string[] {
 }
 
 export function toRoomPayload(row: Record<string, string>): Record<string, unknown> {
-  const designatedDepartment = normalizeDepartmentValue(row.designated_department ?? "");
+  // The export may contain multiple departments comma-separated (e.g. "הנהלה, מכירות")
+  // but designated_department is a single value — use only the first one.
+  const rawDept = (row.designated_department ?? "").split(",")[0].trim();
+  const designatedDepartment = normalizeDepartmentValue(rawDept);
   return {
     building_name: normalizeBuildingValue(row.building_name ?? ""), room_number: Number(row.room_number) || 0,
     number_of_beds: Number(row.number_of_beds) || 0, room_rank: normalizeRankValue(row.room_rank ?? ""),
@@ -163,6 +166,132 @@ export function toRoomPayload(row: Record<string, string>): Record<string, unkno
     occupant_ids: parseOccupantIds(row.occupant_ids ?? ""),
     ...(designatedDepartment ? { designated_department: designatedDepartment } : {}),
   };
+}
+
+/**
+ * Try to parse an Excel buffer as a columnar (visual) export.
+ * Returns room records if the file matches the columnar format, or null otherwise.
+ *
+ * The columnar format has title rows like "בנים · א" followed by room-header
+ * rows like "חדר 101" and then occupant-name rows.
+ */
+export async function parseColumnarExcel(buffer: ArrayBuffer): Promise<Record<string, string>[] | null> {
+  const XLSX = await import("xlsx");
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return null;
+  const sheet = workbook.Sheets[sheetName];
+  const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  if (raw.length < 3) return null;
+
+  const roomPattern = /^חדר\s+(\d+)/;
+
+  // A title row matches "X · Y" but the NEXT row must contain room headers.
+  // This distinguishes "בנים · א" from "חדר 101 · הנהלה".
+  function isTitleRow(idx: number): RegExpExecArray | null {
+    const cell = String((raw[idx] as unknown[])[0] ?? "").trim();
+    const m = /^(.+)\s·\s(.+)$/.exec(cell);
+    if (!m) return null;
+    // Must NOT start with "חדר" (that's a room header, not a title)
+    if (roomPattern.test(cell)) return null;
+    // Next row must have at least one room header
+    if (idx + 1 >= raw.length) return null;
+    const nextRow = raw[idx + 1] as unknown[];
+    const hasRoom = nextRow.some((c) => roomPattern.test(String(c ?? "").trim()));
+    return hasRoom ? m : null;
+  }
+
+  // Detect columnar format
+  let foundTitle = false;
+  for (let i = 0; i < raw.length; i++) {
+    if (isTitleRow(i)) { foundTitle = true; break; }
+  }
+  if (!foundTitle) return null;
+
+  // Parse blocks
+  const results: Record<string, string>[] = [];
+  let r = 0;
+  while (r < raw.length) {
+    const titleMatch = isTitleRow(r);
+    if (!titleMatch) { r++; continue; }
+
+    const gender = titleMatch[1];
+    const building = titleMatch[2];
+    r++; // move to room headers row
+
+    if (r >= raw.length) break;
+    const headerRow = raw[r] as unknown[];
+    const roomHeaders: { roomNumber: string; dept: string; col: number }[] = [];
+    for (let c = 0; c < headerRow.length; c++) {
+      const cell = String(headerRow[c] ?? "").trim();
+      const rm = roomPattern.exec(cell);
+      if (rm) {
+        const parts = cell.split(" · ");
+        const dept = parts.length > 1 ? parts.slice(1).join(" · ") : "";
+        roomHeaders.push({ roomNumber: rm[1], dept, col: c });
+      }
+    }
+    if (roomHeaders.length === 0) { r++; continue; }
+    r++; // move to data rows
+
+    // Collect all rows until the next title or two consecutive empty rows.
+    const occupantsByCol: string[][] = roomHeaders.map(() => []);
+    let lastContentIdx = -1;
+    let consecutiveEmpty = 0;
+    while (r < raw.length) {
+      if (isTitleRow(r)) break;
+      const row = raw[r] as unknown[];
+      const hasContent = roomHeaders.some((rh) =>
+        String(row[rh.col] ?? "").trim() !== "",
+      );
+      if (!hasContent) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= 2) break;
+        r++;
+        continue;
+      }
+      consecutiveEmpty = 0;
+      lastContentIdx = r;
+      for (let i = 0; i < roomHeaders.length; i++) {
+        const val = String(row[roomHeaders[i].col] ?? "").trim();
+        if (val) occupantsByCol[i].push(val);
+      }
+      r++;
+    }
+    // The block's row count = rows from start to last row with actual content.
+    // All rooms share this count (the max capacity in the visual export).
+    // We can't recover per-room bed counts from the visual format, so use the
+    // max occupant count across all rooms as a floor.
+    const maxOccupants = Math.max(...occupantsByCol.map((o) => o.length), 1);
+    const totalDataRows = maxOccupants;
+
+    // Build room records
+    for (let i = 0; i < roomHeaders.length; i++) {
+      const rh = roomHeaders[i];
+      const ids = occupantsByCol[i].map((entry) => {
+        const dashIdx = entry.lastIndexOf(" - ");
+        return dashIdx >= 0 ? entry.substring(dashIdx + 3) : entry;
+      });
+      // Use max of occupant count and totalDataRows for beds
+      const beds = Math.max(totalDataRows, occupantsByCol[i].length);
+      // The visual export shows all departments (comma-separated) in the header,
+      // but designated_department is a single value. Use the first one only if
+      // there's exactly one; otherwise leave empty (room serves multiple depts).
+      const deptParts = rh.dept ? rh.dept.split(",").map((d) => d.trim()).filter(Boolean) : [];
+      const dept = deptParts.length === 1 ? deptParts[0] : "";
+      results.push({
+        building_name: building,
+        room_number: rh.roomNumber,
+        number_of_beds: String(beds),
+        room_rank: "זוטר",  // Visual format doesn't include rank; default to lowest
+        gender: gender,
+        occupant_ids: ids.join(","),
+        designated_department: dept,
+      });
+    }
+  }
+
+  return results.length > 0 ? results : null;
 }
 
 export function parseFile(file: File): Promise<Record<string, string>[]> {

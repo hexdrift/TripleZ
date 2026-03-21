@@ -7,7 +7,7 @@ import { useAppData } from "@/components/app-shell";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { ColumnHeader, useColumnFilters } from "@/components/excel-filter";
 import { StatCard } from "@/components/stat-card";
-import { exportToExcel } from "@/lib/export";
+import { exportToExcel, exportFlatRooms } from "@/lib/export";
 import { buildingHe, deptHe, genderHe, rankHe } from "@/lib/hebrew";
 import { Room } from "@/lib/types";
 import { isRoomVisibleToManagerWithMap, deptBedCounts } from "@/lib/room-utils";
@@ -26,6 +26,11 @@ const AddRoomModal = dynamic(
 
 const RoomDetailModal = dynamic(
   () => import("@/components/room-detail-modal").then((module) => module.RoomDetailModal),
+  { ssr: false },
+);
+
+const ExportFormatModal = dynamic(
+  () => import("@/components/export-format-modal").then((module) => module.ExportFormatModal),
   { ssr: false },
 );
 
@@ -91,6 +96,7 @@ function BuildingContent() {
   const filter = usePageFilter();
   const { rooms, buildings, personnel, loading, auth } = useAppData();
   const [addRoomOpen, setAddRoomOpen] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("room_number");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
@@ -327,17 +333,7 @@ function BuildingContent() {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => exportToExcel(
-                  exportName,
-                  [showBuildingCol ? "שם מבנה" : null, "מספר חדר", showDepartmentCol ? "זירות" : null, "מגדר"].filter(Boolean) as string[],
-                  filteredRooms.map((r) => [
-                    ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
-                    String(r.room_number),
-                    ...(showDepartmentCol ? [r.departments.map(deptHe).join(", ") || "—"] : []),
-                    genderHe(r.gender),
-                    r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
-                  ]),
-                )}
+                onClick={() => setExportModalOpen(true)}
                 className="inline-flex h-9 shrink-0 items-center gap-1.5 text-[12px]"
               >
                 <IconDownload size={14} />
@@ -482,6 +478,38 @@ function BuildingContent() {
         />
       ) : null}
       {selectedRoom ? <RoomDetailModal room={selectedRoom} onClose={() => setSelectedRoomKey(null)} /> : null}
+      <ExportFormatModal
+        open={exportModalOpen}
+        onClose={() => setExportModalOpen(false)}
+        onExportVisual={() => {
+          void exportToExcel(
+            exportName,
+            [showBuildingCol ? "שם מבנה" : null, "מספר חדר", showDepartmentCol ? "זירות" : null, "מגדר"].filter(Boolean) as string[],
+            filteredRooms.map((r) => [
+              ...(showBuildingCol ? [buildingHe(r.building_name)] : []),
+              String(r.room_number),
+              ...(showDepartmentCol ? [r.departments.map(deptHe).join(", ") || "—"] : []),
+              genderHe(r.gender),
+              r.number_of_beds,
+              r.occupant_ids.map((id) => r.occupant_names?.[id] ? `${r.occupant_names[id]} - ${id}` : id),
+            ]),
+          );
+        }}
+        onExportFlat={() => {
+          void exportFlatRooms(
+            exportName,
+            filteredRooms.map((r) => ({
+              building_name: buildingHe(r.building_name),
+              room_number: String(r.room_number),
+              number_of_beds: r.number_of_beds,
+              room_rank: rankHe(r.room_rank),
+              gender: genderHe(r.gender),
+              departments: r.designated_department ? deptHe(r.designated_department) : "",
+              occupant_ids: r.occupant_ids.join(","),
+            })),
+          );
+        }}
+      />
     </div>
   );
 }
